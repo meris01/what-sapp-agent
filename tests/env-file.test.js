@@ -6,9 +6,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { renderEnv, templateKeys, TEMPLATE_MARKER } = require('../src/lib/env-template');
+const { renderEnv, KEYS } = require('../src/lib/env-template');
 
-/** Each case gets its own throwaway .env, loaded through a fresh module. */
+const MODULES = ['../src/lib/paths', '../src/lib/env', '../src/lib/secrets'];
+
+/** Each case gets its own throwaway data directory and .env. */
 function withTempEnv(run) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-file-'));
   const envFile = path.join(dir, '.env');
@@ -16,107 +18,162 @@ function withTempEnv(run) {
   const previous = { ...process.env };
   process.env.DATA_DIR = path.join(dir, 'data');
   process.env.ENV_FILE = envFile;
-  for (const key of templateKeys()) delete process.env[key];
+  for (const key of [...KEYS, 'ENCRYPTION_KEY', 'SESSION_SECRET']) delete process.env[key];
 
-  // Fresh copies: paths and env cache module-level state.
-  for (const name of ['../src/lib/paths', '../src/lib/env']) {
-    delete require.cache[require.resolve(name)];
-  }
+  for (const name of MODULES) delete require.cache[require.resolve(name)];
   const env = require('../src/lib/env');
 
   try {
-    return run({ env, envFile, read: () => fs.readFileSync(envFile, 'utf8') });
+    return run({
+      env,
+      envFile,
+      dataDir: process.env.DATA_DIR,
+      read: () => fs.readFileSync(envFile, 'utf8'),
+      reload: () => {
+        for (const name of MODULES) delete require.cache[require.resolve(name)];
+        return require('../src/lib/env');
+      },
+    });
   } finally {
     for (const key of Object.keys(process.env)) delete process.env[key];
     Object.assign(process.env, previous);
-    for (const name of ['../src/lib/paths', '../src/lib/env']) {
-      delete require.cache[require.resolve(name)];
-    }
+    for (const name of MODULES) delete require.cache[require.resolve(name)];
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-test('a fresh install gets every setting, documented, with defaults', () => {
+test('a fresh install writes exactly two settings', () => {
   withTempEnv(({ env, read }) => {
-    const { generatedPassword } = env.bootstrapSecrets();
-    assert.ok(generatedPassword, 'a password is generated');
+    const result = env.bootstrapSecrets();
 
     const contents = read();
-    assert.ok(contents.startsWith(TEMPLATE_MARKER), 'the file is the documented layout');
+    const settings = contents.split('\n').filter((line) => /^[A-Z_]+=/.test(line));
 
-    for (const key of templateKeys()) {
-      assert.match(contents, new RegExp(`^(# )?${key}=`, 'm'), `${key} should be present`);
-    }
+    assert.strictEqual(settings.length, 2, `expected two lines, got:\n${settings.join('\n')}`);
+    assert.match(contents, /^ADMIN_USERNAME=admin$/m);
+    assert.match(contents, new RegExp(`^ADMIN_PASSWORD=${result.generatedPassword}$`, 'm'));
 
-    // The one line an operator is expected to touch, ready and empty.
-    assert.match(contents, /^ADMIN_PASSWORD=$/m);
-    assert.match(contents, /This is the one line you normally change/);
+    // Nothing machine-generated leaks into the file a person reads.
+    assert.ok(!/ENCRYPTION_KEY/.test(contents), 'no encryption key in .env');
+    assert.ok(!/SESSION_SECRET/.test(contents), 'no session secret in .env');
+    assert.ok(!/ADMIN_PASSWORD_HASH/.test(contents), 'no password hash in .env');
   });
 });
 
-test('changing only ADMIN_PASSWORD is enough, and the plaintext does not linger', () => {
-  withTempEnv(({ env, envFile, read }) => {
+test('the generated keys live beside the database, not in .env', () => {
+  withTempEnv(({ env, dataDir }) => {
     env.bootstrapSecrets();
 
-    // What a client does: type a password on that one line and restart.
-    fs.writeFileSync(envFile, read().replace(/^ADMIN_PASSWORD=$/m, 'ADMIN_PASSWORD=chosen-by-the-client'));
+    const secretsFile = path.join(dataDir, 'secrets.json');
+    assert.ok(fs.existsSync(secretsFile), 'secrets.json should exist');
 
-    delete require.cache[require.resolve('../src/lib/env')];
-    const reloaded = require('../src/lib/env');
-    const result = reloaded.bootstrapSecrets();
-
-    assert.ok(reloaded.verifyPassword('chosen-by-the-client', result.adminPasswordHash), 'the new password works');
-    assert.strictEqual(result.adminPasswordProvided, true);
-
-    const after = read();
-    assert.ok(!after.includes('chosen-by-the-client'), 'the readable password is wiped');
-    assert.match(after, /^ADMIN_PASSWORD=$/m, 'and the line stays ready for next time');
+    const stored = JSON.parse(fs.readFileSync(secretsFile, 'utf8'));
+    assert.match(stored.encryptionKey, /^[0-9a-f]{64}$/);
+    assert.match(stored.sessionSecret, /^[0-9a-f]{64}$/);
   });
 });
 
-test('an upgrade keeps existing secrets and adds the documentation', () => {
-  withTempEnv(({ env, envFile, read }) => {
-    // The old bare format, as written by earlier versions.
-    const bare = [
+test('the keys are stable across restarts', () => {
+  withTempEnv(({ env, dataDir, reload }) => {
+    env.bootstrapSecrets();
+    const first = JSON.parse(fs.readFileSync(path.join(dataDir, 'secrets.json'), 'utf8'));
+
+    reload().bootstrapSecrets();
+    const second = JSON.parse(fs.readFileSync(path.join(dataDir, 'secrets.json'), 'utf8'));
+
+    assert.deepStrictEqual(second, first, 'regenerating them would orphan the stored API key');
+  });
+});
+
+test('changing the password in .env is picked up, and nothing else moves', () => {
+  withTempEnv(({ env, envFile, read, reload }) => {
+    const first = env.bootstrapSecrets();
+
+    fs.writeFileSync(
+      envFile,
+      read().replace(/^ADMIN_PASSWORD=.*$/m, 'ADMIN_PASSWORD=chosen-by-the-client')
+    );
+
+    const second = reload().bootstrapSecrets();
+
+    assert.strictEqual(second.password, 'chosen-by-the-client');
+    assert.strictEqual(second.generatedPassword, null, 'nothing is generated when one is supplied');
+    assert.notStrictEqual(
+      second.passwordFingerprint,
+      first.passwordFingerprint,
+      'the change must be detectable'
+    );
+    assert.match(read(), /^ADMIN_PASSWORD=chosen-by-the-client$/m, 'and it stays where they put it');
+  });
+});
+
+test('changing the username works the same way', () => {
+  withTempEnv(({ env, envFile, read, reload }) => {
+    env.bootstrapSecrets();
+    fs.writeFileSync(envFile, read().replace(/^ADMIN_USERNAME=.*$/m, 'ADMIN_USERNAME=maria'));
+
+    const result = reload().bootstrapSecrets();
+    assert.strictEqual(result.username, 'maria');
+  });
+});
+
+test('an old sprawling .env is cut down without losing its keys', () => {
+  withTempEnv(({ env, envFile, dataDir, read }) => {
+    const legacy = [
+      '# WhatsApp Agent configuration',
       `ENCRYPTION_KEY=${'a'.repeat(64)}`,
       `SESSION_SECRET=${'b'.repeat(64)}`,
       'ADMIN_PASSWORD_HASH=scrypt$16384$8$1$c2FsdA$aGFzaA',
       'PORT=4000',
-      'SOMETHING_CUSTOM=keep-me',
+      'PRESENCE_MODE=online',
     ].join('\n');
-    fs.writeFileSync(envFile, `${bare}\n`);
+    fs.writeFileSync(envFile, `${legacy}\n`);
 
-    env.bootstrapSecrets();
-    const after = read();
+    const result = env.bootstrapSecrets();
 
-    assert.ok(after.startsWith(TEMPLATE_MARKER), 'it is upgraded to the documented layout');
-    assert.match(after, new RegExp(`ENCRYPTION_KEY=${'a'.repeat(64)}`), 'the encryption key survives');
-    assert.match(after, new RegExp(`SESSION_SECRET=${'b'.repeat(64)}`), 'the session secret survives');
-    assert.match(after, /ADMIN_PASSWORD_HASH=scrypt\$/, 'the password hash survives');
-    assert.match(after, /^PORT=4000$/m, 'a changed default is kept, not reset');
-    assert.match(after, /^SOMETHING_CUSTOM=keep-me$/m, 'an unrecognised setting is kept too');
-    assert.match(after, /YOUR OWN SETTINGS/, 'and moved somewhere obvious');
+    // The keys are carried across rather than regenerated.
+    const stored = JSON.parse(fs.readFileSync(path.join(dataDir, 'secrets.json'), 'utf8'));
+    assert.strictEqual(stored.encryptionKey, 'a'.repeat(64), 'the encryption key survives');
+    assert.strictEqual(stored.sessionSecret, 'b'.repeat(64), 'the session secret survives');
+
+    // The old password hash is handed on so the existing password still works.
+    assert.match(result.legacyPasswordHash, /^scrypt\$/);
+
+    // And the file is now just the two lines.
+    const settings = read().split('\n').filter((line) => /^[A-Z_]+=/.test(line));
+    assert.strictEqual(settings.length, 2, `expected two lines, got:\n${settings.join('\n')}`);
   });
 });
 
 test('a second start does not churn the file', () => {
-  withTempEnv(({ env, read }) => {
+  withTempEnv(({ env, read, reload }) => {
     env.bootstrapSecrets();
     const first = read();
-
-    delete require.cache[require.resolve('../src/lib/env')];
-    require('../src/lib/env').bootstrapSecrets();
-
-    assert.strictEqual(read(), first, 'nothing changes when nothing needs to');
+    reload().bootstrapSecrets();
+    assert.strictEqual(read(), first);
   });
 });
 
-test('the shipped example matches the template and carries no secrets', () => {
+test('the shipped example is the same two lines, with no password', () => {
   const example = fs.readFileSync(path.join(__dirname, '..', '.env.example'), 'utf8');
-  assert.strictEqual(example, renderEnv({}, { includeGenerated: false }), 'run npm run build:env');
+  assert.strictEqual(example, renderEnv(), 'run npm run build:env');
 
-  assert.ok(!/^ENCRYPTION_KEY=.+/m.test(example), 'no encryption key');
-  assert.ok(!/^SESSION_SECRET=.+/m.test(example), 'no session secret');
-  assert.ok(!/^ADMIN_PASSWORD_HASH=.+/m.test(example), 'no password hash');
-  assert.match(example, /^ADMIN_PASSWORD=$/m, 'but the password line is there to fill in');
+  const settings = example.split('\n').filter((line) => /^[A-Z_]+=/.test(line));
+  assert.strictEqual(settings.length, 2);
+  assert.match(example, /^ADMIN_USERNAME=admin$/m);
+  assert.match(example, /^ADMIN_PASSWORD=$/m, 'the example ships without a password');
+});
+
+test('an injected environment variable still overrides a stored key', () => {
+  withTempEnv(({ env, reload }) => {
+    env.bootstrapSecrets();
+
+    process.env.ENCRYPTION_KEY = 'f'.repeat(64);
+    reload();
+    const secrets = require('../src/lib/secrets');
+    secrets.resetCache();
+
+    assert.strictEqual(secrets.encryptionKey(), 'f'.repeat(64), 'a container can inject its own');
+    delete process.env.ENCRYPTION_KEY;
+  });
 });

@@ -96,8 +96,8 @@ Then open <http://127.0.0.1:3000> and work through the three pages:
 | Instructions | `/instructions` | The business instructions the AI follows |
 | Settings | `/settings` | API key, model, follow-up timing, pause switch |
 
-The dashboard is account-based. On the first start an **owner** account is created and its
-password printed to the console **once** — write it down, only the hash is kept. Set your own with
+The dashboard is account-based. On the first start an **owner** account is created from
+`ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`, and the password printed to the console — write it down, only the hash is kept. Set your own with
 `ADMIN_PASSWORD` in `.env` and restart; the plaintext line is removed automatically.
 
 It still binds to `127.0.0.1` by default, because the dashboard holds every customer
@@ -121,7 +121,8 @@ a way in, not a feature.
 - **Owners** manage the team as well as running the assistant.
 - **Members** can do everything except hand out or remove access.
 - Removing someone signs them out everywhere, immediately.
-- Lost the owner password? Set `ADMIN_PASSWORD` in `.env` and restart to reset it.
+- Lost the owner password? It is in `.env`. Change it there and restart.
+- Changing a password on this page sticks: `.env` is only re-applied when you edit it.
 
 There is also a **[terms of use](src/views/terms.full.html)** page at `/terms`, readable
 without signing in and linked from the sign-in and join screens. It is a template with
@@ -408,24 +409,24 @@ The app prints a note at startup if `HOST` is not loopback. When you do expose i
 
 ## Configuration
 
-Everything is optional — see [`.env.example`](.env.example) for the full list with
-defaults. The values worth knowing:
+`.env` has two lines. That is the whole thing:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `HOST` / `PORT` | `127.0.0.1` / `3000` | Where the dashboard listens |
-| `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy, for real client IPs |
-| `MESSAGE_RETENTION_DAYS` | `30` | How long conversation history is kept |
-| `INBOUND_DEBOUNCE_MS` | `3000` | Short pause that batches a burst of messages |
-| `REPLY_DELAY_MIN_MS` / `REPLY_DELAY_MAX_MS` | `3000` / `60000` | The random wait before a reply lands |
-| `READ_GAP_MIN_MS` / `READ_GAP_MAX_MS` | `400` / `2500` | Pause between blue ticks and typing |
-| `PRESENCE_MODE` | `reactive` | `reactive`, `online`, or `offline` |
-| `PRESENCE_LINGER_MIN_MS` / `_MAX_MS` | `5000` / `25000` | How long it stays online after replying |
-| `MEMORY_UPDATE_EVERY` | `6` | Messages between rewrites of a customer's notes |
-| `MAX_REPLY_CHARS` | `350` | Hard cap on reply length |
-| `HISTORY_LIMIT` | `24` | Past messages sent to the model as context |
-| `DATA_DIR` | `./data` | SQLite database and WhatsApp credentials |
-| `WA_LOG_LEVEL` | `silent` | Set to `debug` to diagnose connection problems |
+```
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-password
+```
+
+Change either, restart, done. Everything else — port, reply timing, presence,
+retention, memory, model limits — has a working default in the code. If you ever need
+to change one, set it as a real environment variable; it does not belong in a file a
+client is expected to open.
+
+The keys the app generates for itself (encryption and session) live in
+`data/secrets.json`, created on first start and locked to the service account. Nobody
+chooses them and nobody should edit them, so they are kept out of `.env` entirely.
+
+Keep `data/` and `.env` together when moving a server: the encryption key is what
+unlocks the API key stored in the database.
 
 ## Tests
 

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { useTempDataDir, stubOpenRouter } = require('./helpers');
+const { useTempDataDir, createOwner, stubOpenRouter } = require('./helpers');
 useTempDataDir();
 
 // Captured before any test stubs global.fetch, so the client always talks to
@@ -13,8 +13,8 @@ const realFetch = global.fetch.bind(global);
 process.env.SESSION_SECRET = 'a'.repeat(64);
 
 const users = require('../src/lib/users');
-// The dashboard is account-based now: give the suite an owner to sign in as.
-users.ensureOwner({ password: 's3cret-password', username: 'owner' });
+// The dashboard is account-based: give the suite an owner to sign in as.
+createOwner('owner', 's3cret-password');
 
 const { createApp } = require('../src/app');
 const settings = require('../src/lib/settings');

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { useTempDataDir } = require('./helpers');
+const { useTempDataDir, createOwner } = require('./helpers');
 useTempDataDir();
 
 const realFetch = global.fetch.bind(global);
@@ -12,7 +12,7 @@ process.env.SESSION_SECRET = 'a'.repeat(64);
 const users = require('../src/lib/users');
 const { createApp } = require('../src/app');
 
-users.ensureOwner({ password: 'owner-password-1', username: 'owner' });
+createOwner('owner', 'owner-password-1');
 
 const fakeWa = {
   name: 'Test provider',

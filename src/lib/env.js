@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { ENV_FILE } = require('./paths');
-const { renderEnv, templateKeys, TEMPLATE_MARKER } = require('./env-template');
+const secrets = require('./secrets');
+const { renderEnv, TEMPLATE_MARKER, DEFAULT_USERNAME } = require('./env-template');
 
 function parseEnvFile(contents) {
   const out = {};
@@ -27,42 +28,18 @@ function parseEnvFile(contents) {
 }
 
 function loadEnvFile() {
-  if (!fs.existsSync(ENV_FILE)) return;
+  if (!fs.existsSync(ENV_FILE)) return {};
   const parsed = parseEnvFile(fs.readFileSync(ENV_FILE, 'utf8'));
   for (const [key, value] of Object.entries(parsed)) {
-    // Real environment variables always win over the .env file.
+    // Real environment variables always win over the file.
     if (process.env[key] === undefined) process.env[key] = value;
   }
+  return parsed;
 }
 
-/**
- * Writes entries into .env, replacing existing keys in place instead of
- * appending duplicates. Keys listed in `remove` are dropped from the file.
- */
-function writeEnvEntries(entries, remove = []) {
+function writeEnvFile({ username, password }) {
   fs.mkdirSync(path.dirname(ENV_FILE), { recursive: true });
-  const raw = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, 'utf8') : '';
-  const lines = raw ? raw.split(/\r?\n/) : [];
-  const pending = new Map(Object.entries(entries));
-  const removeSet = new Set(remove);
-  const out = [];
-
-  for (const line of lines) {
-    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
-    const key = match && match[1];
-    if (key && removeSet.has(key)) continue;
-    if (key && pending.has(key)) {
-      out.push(key + '=' + pending.get(key));
-      pending.delete(key);
-      continue;
-    }
-    out.push(line);
-  }
-
-  while (out.length && out[out.length - 1].trim() === '') out.pop();
-  for (const [key, value] of pending) out.push(key + '=' + value);
-
-  fs.writeFileSync(ENV_FILE, out.join('\n') + '\n', { mode: 0o600 });
+  fs.writeFileSync(ENV_FILE, renderEnv({ username, password }), { mode: 0o600 });
   try {
     fs.chmodSync(ENV_FILE, 0o600);
   } catch {
@@ -120,112 +97,78 @@ function verifyPassword(password, stored) {
   }
 }
 
-/* --------------------------- the documented file --------------------------- */
-
-/** Reads every key currently in .env, so a rewrite never loses a value. */
-function currentValues() {
-  if (!fs.existsSync(ENV_FILE)) return {};
-  return parseEnvFile(fs.readFileSync(ENV_FILE, 'utf8'));
-}
-
-/**
- * Writes .env in the documented layout: every setting present with its
- * default, the operator's own values preserved, and the password line ready
- * at the top. Anything the template does not know about is kept at the end
- * rather than silently dropped.
- */
-function writeDocumentedEnv(extraValues = {}) {
-  const values = { ...currentValues(), ...extraValues };
-  const known = new Set(templateKeys());
-
-  let contents = renderEnv(values);
-
-  const unknown = Object.entries(values).filter(([key]) => !known.has(key));
-  if (unknown.length) {
-    const rule = '# ---------------------------------------------------------------------------';
-    contents += [
-      '',
-      rule,
-      '# YOUR OWN SETTINGS',
-      rule,
-      '',
-      ...unknown.map(([key, value]) => `${key}=${value}`),
-      '',
-    ].join('\n');
-  }
-
-  fs.mkdirSync(path.dirname(ENV_FILE), { recursive: true });
-  fs.writeFileSync(ENV_FILE, contents, { mode: 0o600 });
-  try {
-    fs.chmodSync(ENV_FILE, 0o600);
-  } catch {
-    /* best effort on platforms without POSIX modes */
-  }
-}
-
-/** True when .env is still the old bare list rather than the documented one. */
-function needsDocumenting() {
-  if (!fs.existsSync(ENV_FILE)) return true;
-  return !fs.readFileSync(ENV_FILE, 'utf8').includes(TEMPLATE_MARKER);
+/** Identifies a password without storing it, so a change in .env is noticed. */
+function fingerprint(value) {
+  return crypto.createHash('sha256').update(`bootstrap:${value}`).digest('hex');
 }
 
 /* ------------------------------- bootstrap -------------------------------- */
 
 /**
- * Makes sure every secret the app needs exists. Anything missing is generated
- * once and persisted to .env, so a fresh install on a client's server is a
- * single command with nothing to configure by hand.
+ * Prepares everything the app needs to start.
  *
- * Returns the plaintext dashboard password only when it had to be generated;
- * afterwards only the hash exists.
+ * .env holds two lines and nothing else. Keys the app generates for itself go
+ * to data/secrets.json; an older install that kept them in .env has them
+ * carried across, so the stored API key stays readable and nobody is signed
+ * out. Returns the admin credentials and, on a fresh install, the password
+ * that was generated.
  */
 function bootstrapSecrets() {
-  loadEnvFile();
+  // Captured before the file is read: a variable set by the environment (a
+  // container, say) outranks the file, but one we merely loaded last time
+  // must not shadow an edit someone has since made.
+  const injected = {
+    username: process.env.ADMIN_USERNAME,
+    password: process.env.ADMIN_PASSWORD,
+  };
 
-  const generated = {};
-  const removeKeys = [];
+  const existing = loadEnvFile();
+
+  // Adopt whatever the previous format left behind rather than regenerating.
+  secrets.ensureSecrets({
+    encryptionKey: existing.ENCRYPTION_KEY,
+    sessionSecret: existing.SESSION_SECRET,
+  });
+
+  const username =
+    (injected.username || existing.ADMIN_USERNAME || DEFAULT_USERNAME).trim() || DEFAULT_USERNAME;
+
+  let password = injected.password || existing.ADMIN_PASSWORD || '';
   let generatedPassword = null;
-  let adminPasswordProvided = false;
-
-  if (!/^[0-9a-fA-F]{64}$/.test(process.env.ENCRYPTION_KEY || '')) {
-    process.env.ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
-    generated.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-  }
-
-  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
-    process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex');
-    generated.SESSION_SECRET = process.env.SESSION_SECRET;
-  }
-
-  if (process.env.ADMIN_PASSWORD) {
-    // Convenience path: a plaintext password in .env is hashed, then the
-    // plaintext line is dropped so it never lingers on disk.
-    process.env.ADMIN_PASSWORD_HASH = hashPassword(process.env.ADMIN_PASSWORD);
-    generated.ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
-    generated.ADMIN_PASSWORD = '';
-    delete process.env.ADMIN_PASSWORD;
-    adminPasswordProvided = true;
-  } else if (!process.env.ADMIN_PASSWORD_HASH) {
+  if (!password) {
     generatedPassword = crypto.randomBytes(12).toString('base64url');
-    process.env.ADMIN_PASSWORD_HASH = hashPassword(generatedPassword);
-    generated.ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+    password = generatedPassword;
   }
 
-  // A fresh install, or one still on the old bare format, gets the fully
-  // documented file. After that only the changed keys are touched, so an
-  // operator's own comments and ordering survive.
-  if (needsDocumenting()) writeDocumentedEnv(generated);
-  else if (Object.keys(generated).length || removeKeys.length) writeEnvEntries(generated, removeKeys);
+  const isTwoLineFormat =
+    fs.existsSync(ENV_FILE) && fs.readFileSync(ENV_FILE, 'utf8').startsWith(TEMPLATE_MARKER);
 
-  return { generatedPassword, adminPasswordProvided, adminPasswordHash: process.env.ADMIN_PASSWORD_HASH };
+  // Rewrite whenever the file is missing, still the old sprawling format, or
+  // simply out of step with what we resolved.
+  if (
+    !isTwoLineFormat ||
+    existing.ADMIN_USERNAME !== username ||
+    existing.ADMIN_PASSWORD !== password
+  ) {
+    writeEnvFile({ username, password });
+  }
+
+  return {
+    username,
+    password,
+    generatedPassword,
+    passwordFingerprint: fingerprint(`${username}:${password}`),
+    // Only present when upgrading an install that predates the users table.
+    legacyPasswordHash: existing.ADMIN_PASSWORD_HASH || null,
+  };
 }
 
 module.exports = {
-  writeDocumentedEnv,
-  needsDocumenting,
   loadEnvFile,
-  bootstrapSecrets,
-  writeEnvEntries,
+  writeEnvFile,
+  parseEnvFile,
   hashPassword,
   verifyPassword,
+  fingerprint,
+  bootstrapSecrets,
 };

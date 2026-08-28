@@ -180,42 +180,58 @@ const stmtResetOwnerPassword = db.prepare(`
 `);
 
 /**
- * Creates the first owner account on a fresh install.
+ * Keeps the owner account in step with the two lines in .env.
  *
- * Three ways in, in order of preference:
- *   password     the plaintext generated at first start
- *   passwordHash an install that predates team accounts, whose single
- *                dashboard password lives in .env - migrated as-is so the
- *                operator's existing password keeps working
+ * On a fresh install it creates the account. Afterwards it only acts when the
+ * username or password in .env has actually changed, which matters because
+ * someone may have changed their password on the Team page - re-applying .env
+ * on every restart would silently undo that.
+ *
+ * An install that predates the users table has its old hash adopted, so the
+ * password people already know keeps working.
  */
-function ensureOwner({ password, passwordHash, username = 'owner' }) {
-  if (userCount() > 0) return null;
+function syncOwnerFromEnv({ username, password, passwordFingerprint, legacyPasswordHash }) {
+  const settings = require('./settings');
+  const FINGERPRINT_KEY = 'bootstrap_admin_fingerprint';
 
-  if (password) {
-    const created = createUser({ username, password, role: 'owner' });
-    if (created.ok) {
-      logger.info({ username: created.user.username }, 'created the first owner account');
-      return created.user;
+  if (userCount() === 0) {
+    if (legacyPasswordHash) {
+      stmtInsertOwnerHash.run(username, legacyPasswordHash, now());
+      dbApi.setSetting(FINGERPRINT_KEY, passwordFingerprint);
+      logger.info({ username }, 'adopted the existing dashboard password as the owner account');
+      return findByUsername(username);
     }
-    logger.error({ error: created.error }, 'could not create the first owner account');
-    return null;
+
+    const created = createUser({ username, password, role: 'owner' });
+    if (!created.ok) {
+      logger.error({ error: created.error }, 'could not create the owner account');
+      return null;
+    }
+    dbApi.setSetting(FINGERPRINT_KEY, passwordFingerprint);
+    logger.info({ username: created.user.username }, 'created the owner account');
+    return created.user;
   }
 
-  if (passwordHash) {
-    stmtInsertOwnerHash.run(username, passwordHash, now());
-    logger.info({ username }, 'migrated the existing dashboard password into an owner account');
-    return findByUsername(username);
+  // Unchanged since we last applied it: leave the account alone.
+  if (dbApi.getSetting(FINGERPRINT_KEY) === passwordFingerprint) return null;
+
+  const owner = db.prepare("SELECT * FROM users WHERE role = 'owner' ORDER BY id LIMIT 1").get();
+  if (!owner) return null;
+
+  if (owner.username !== username) {
+    const taken = findByUsername(username);
+    if (taken && taken.id !== owner.id) {
+      logger.warn({ username }, 'cannot rename the owner: that username is already taken');
+    } else {
+      db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username, owner.id);
+      logger.info({ username }, 'owner username updated from .env');
+    }
   }
 
-  return null;
-}
-
-/** Lets ADMIN_PASSWORD in .env act as a documented "I lost the password" reset. */
-function resetOwnerPassword(passwordHash) {
-  if (!passwordHash || userCount() === 0) return false;
-  stmtResetOwnerPassword.run(passwordHash);
-  logger.warn('owner password reset from ADMIN_PASSWORD in .env');
-  return true;
+  stmtSetPassword.run(hashPassword(password), owner.id);
+  dbApi.setSetting(FINGERPRINT_KEY, passwordFingerprint);
+  logger.info({ username }, 'owner password updated from .env');
+  return findByUsername(username);
 }
 
 module.exports = {
@@ -237,6 +253,5 @@ module.exports = {
   listInvites,
   revokeInvites,
   purgeInvites,
-  ensureOwner,
-  resetOwnerPassword,
+  syncOwnerFromEnv,
 };

@@ -14,6 +14,23 @@ function useTempDataDir() {
   return dir;
 }
 
+/**
+ * Creates the owner account the way startup does, from the two .env values.
+ */
+function createOwner(username = 'owner', password = 'owner-password-1') {
+  const users = require('../src/lib/users');
+  const { fingerprint } = require('../src/lib/env');
+
+  users.syncOwnerFromEnv({
+    username,
+    password,
+    passwordFingerprint: fingerprint(username + ':' + password),
+    legacyPasswordHash: null,
+  });
+
+  return { username, password };
+}
+
 /** Stand-in for the Baileys client: records what would have been sent. */
 class FakeWhatsApp extends EventEmitter {
   constructor() {
@@ -110,4 +127,4 @@ function stubOpenRouter(replies) {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-module.exports = { useTempDataDir, FakeWhatsApp, stubOpenRouter, wait };
+module.exports = { useTempDataDir, createOwner, FakeWhatsApp, stubOpenRouter, wait };

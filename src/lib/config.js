@@ -13,6 +13,9 @@ function bool(value, fallback) {
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
 
+// Generated keys live beside the database, not in .env. See lib/secrets.js.
+const secrets = require('./secrets');
+
 module.exports = {
   get port() {
     return int(process.env.PORT, 3000, { min: 1, max: 65535 });
@@ -32,10 +35,7 @@ module.exports = {
     return int(process.env.SESSION_TTL_HOURS, 12, { min: 1, max: 720 });
   },
   get sessionSecret() {
-    return process.env.SESSION_SECRET;
-  },
-  get adminPasswordHash() {
-    return process.env.ADMIN_PASSWORD_HASH;
+    return secrets.sessionSecret();
   },
   get trustProxy() {
     return bool(process.env.TRUST_PROXY, false);
@@ -117,6 +117,6 @@ module.exports = {
     return int(process.env.MAX_INBOUND_CHARS, 4000, { min: 200, max: 20000 });
   },
   get encryptionKey() {
-    return Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+    return Buffer.from(secrets.encryptionKey(), 'hex');
   },
 };

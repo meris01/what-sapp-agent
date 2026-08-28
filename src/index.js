@@ -1,7 +1,7 @@
 'use strict';
 
 const { bootstrapSecrets } = require('./lib/env');
-const { generatedPassword, adminPasswordProvided, adminPasswordHash } = bootstrapSecrets();
+const bootstrap = bootstrapSecrets();
 
 const config = require('./lib/config');
 const logger = require('./lib/logger');
@@ -19,17 +19,19 @@ ensureDirs();
 const RULE = '  ------------------------------------------------\n';
 
 /**
- * Shown once, on a fresh install. After this only the hash exists, so this is
- * the only chance to write the password down.
+ * Shown on a fresh install, when no password was set in .env. It is written
+ * into .env at the same time, so this is a convenience rather than the only
+ * copy.
  */
 function announcePassword() {
-  if (!generatedPassword) return;
+  if (!bootstrap.generatedPassword) return;
   process.stdout.write(
     '\n' +
       RULE +
-      '  Dashboard password (shown once, stored hashed):\n\n' +
-      `      ${generatedPassword}\n\n` +
-      '  Set your own with ADMIN_PASSWORD in .env, then restart.\n' +
+      '  Dashboard sign-in\n\n' +
+      `      username   ${bootstrap.username}\n` +
+      `      password   ${bootstrap.generatedPassword}\n\n` +
+      '  Both are in .env. Change them there and restart.\n' +
       RULE +
       '\n'
   );
@@ -74,12 +76,7 @@ function main() {
 
   // A fresh install gets its first owner from the password printed above; an
   // install that predates team accounts is migrated into one.
-  const createdOwner = users.ensureOwner({
-    password: generatedPassword,
-    passwordHash: adminPasswordHash,
-  });
-  // ADMIN_PASSWORD set on an install that already has accounts is a reset.
-  if (!createdOwner && adminPasswordProvided) users.resetOwnerPassword(adminPasswordHash);
+  users.syncOwnerFromEnv(bootstrap);
   users.purgeInvites();
 
   db.purgeOldData();

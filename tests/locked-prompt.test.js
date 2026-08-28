@@ -5,14 +5,13 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 
-const { useTempDataDir } = require('./helpers');
+const { useTempDataDir, createOwner } = require('./helpers');
 useTempDataDir();
 
 const realFetch = global.fetch.bind(global);
 process.env.SESSION_SECRET = 'a'.repeat(64);
 
-const users = require('../src/lib/users');
-users.ensureOwner({ password: 'owner-password-1', username: 'owner' });
+createOwner('owner', 'owner-password-1');
 
 const prompt = require('../src/lib/prompt');
 const settings = require('../src/lib/settings');

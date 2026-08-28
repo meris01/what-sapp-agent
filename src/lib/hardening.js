@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { DATA_DIR, AUTH_DIR, DB_FILE, ENV_FILE } = require('./paths');
+const { SECRETS_FILE } = require('./secrets');
 const logger = require('./logger');
 
 // POSIX permission bits are meaningless on Windows; chmod there silently
@@ -51,6 +52,8 @@ function secureDataFiles() {
     [`${DB_FILE}-wal`, FILE_MODE],
     [`${DB_FILE}-shm`, FILE_MODE],
     [ENV_FILE, FILE_MODE],
+    // Holds the encryption and session keys.
+    [SECRETS_FILE, FILE_MODE],
   ];
 
   const results = [];
