@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node scripts/not-serverless.js",
+  "installCommand": "echo 'skipped: this app cannot run on a serverless platform'",
+  "outputDirectory": "public"
+}
