@@ -117,9 +117,17 @@ fi
 
 printf '\n'; rule; say "Running on http://127.0.0.1:${PORT}"; rule; printf '\n'
 
-if [ "$FIRST_INSTALL" -eq 1 ]; then
-  say "The dashboard password was printed once, just now. Read it with:"
-  printf '\n      journalctl -u %s | grep -A 3 "shown once"\n\n' "$SERVICE_NAME"
+# Read the credentials straight out of .env rather than hoping a console line
+# is still in the journal. True on a first install and on the tenth.
+if [ -f "$INSTALL_DIR/.env" ]; then
+  ENV_USER="$(grep -E '^ADMIN_USERNAME=' "$INSTALL_DIR/.env" | cut -d= -f2- || true)"
+  ENV_PASS="$(grep -E '^ADMIN_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2- || true)"
+  if [ -n "${ENV_USER:-}" ] && [ -n "${ENV_PASS:-}" ]; then
+    say "Sign in with:"
+    printf '\n      username   %s\n      password   %s\n\n' "$ENV_USER" "$ENV_PASS"
+    say "Both live in $INSTALL_DIR/.env. Change them there and restart."
+    printf '\n'
+  fi
 fi
 
 say "It listens on loopback only. To reach it from your laptop:"
