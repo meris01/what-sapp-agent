@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Sign in · WhatsApp Agent</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body class="bg-background font-body-base text-body-base text-on-surface">
+    {{SPRITE}}
+
+    <main class="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-margin-mobile">
+      <div
+        class="pointer-events-none absolute right-[-10%] top-[-20%] h-[600px] w-[600px] rounded-full bg-secondary-fixed/20 blur-[100px]"
+      ></div>
+
+      <div
+        class="relative z-10 flex w-full max-w-[400px] flex-col items-center rounded-[32px] bg-surface-container-lowest/80 p-8 shadow-[0_8px_40px_rgba(0,0,0,0.04),0_0_2px_rgba(0,0,0,0.06)] backdrop-blur-xl"
+      >
+        <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary">
+          <svg class="icon icon-lg text-on-primary"><use href="#i-lock" /></svg>
+        </div>
+
+        <h1 class="mb-2 font-headline-lg text-headline-lg text-on-surface">Sign in</h1>
+        <p class="mb-8 text-center font-body-sm text-body-sm text-on-surface-variant">
+          Enter the dashboard password for this server.
+        </p>
+
+        <form data-form="login" class="flex w-full flex-col gap-4">
+          <label class="sr-only" for="username">Username</label>
+          <input
+            id="username"
+            type="text"
+            name="username"
+            autocomplete="username"
+            placeholder="Username"
+            required
+            autofocus
+            class="focusable w-full rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface transition-all focus:bg-surface-container-lowest focus:outline-none"
+          />
+          <label class="sr-only" for="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="Password"
+            required
+            class="focusable w-full rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface transition-all focus:bg-surface-container-lowest focus:outline-none"
+          />
+          <button
+            type="submit"
+            class="focusable w-full rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+          >
+            Sign in
+          </button>
+        </form>
+
+        <p
+          data-bind="login-error"
+          hidden
+          role="alert"
+          class="mt-4 w-full rounded-lg bg-error-container px-4 py-3 text-center font-body-sm text-body-sm text-on-error-container"
+        ></p>
+
+        <p class="mt-6 text-center text-[12px] leading-relaxed text-on-surface-variant">
+          The first account is <strong>owner</strong>, with the password printed in the server console on first start.
+          Lost it? Set <code class="rounded bg-surface-container px-1 py-0.5">ADMIN_PASSWORD</code> in
+          <code class="rounded bg-surface-container px-1 py-0.5">.env</code> and restart to reset it.
+        </p>
+
+        <p class="mt-4 text-center text-[12px] text-on-surface-variant">
+          <a href="/terms" class="underline underline-offset-2 hover:text-on-surface">Terms of use</a>
+        </p>
+      </div>
+    </main>
+
+    <script src="/assets/app.js"></script>
+    <script src="/assets/login.js"></script>
+  </body>
+</html>

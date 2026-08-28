@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Join the team · WhatsApp Agent</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body class="bg-background font-body-base text-body-base text-on-surface">
+    {{SPRITE}}
+
+    <main class="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-margin-mobile py-12">
+      <div
+        class="pointer-events-none absolute right-[-10%] top-[-20%] h-[600px] w-[600px] rounded-full bg-secondary-fixed/20 blur-[100px]"
+      ></div>
+
+      <div
+        class="relative z-10 flex w-full max-w-[440px] flex-col items-center rounded-[32px] bg-surface-container-lowest/80 p-8 shadow-[0_8px_40px_rgba(0,0,0,0.04),0_0_2px_rgba(0,0,0,0.06)] backdrop-blur-xl"
+      >
+        <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary">
+          <svg class="icon icon-lg text-on-primary"><use href="#i-user" /></svg>
+        </div>
+
+        <h1 class="mb-2 font-headline-lg text-headline-lg text-on-surface">Join the team</h1>
+        <p class="mb-8 text-center font-body-sm text-body-sm text-on-surface-variant" data-bind="intro">
+          Checking your invite…
+        </p>
+
+        <form data-form="signup" hidden class="flex w-full flex-col gap-4">
+          <label class="flex flex-col gap-1.5">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Choose a username
+            </span>
+            <input
+              type="text"
+              name="username"
+              autocomplete="username"
+              required
+              class="focusable w-full rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+            />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Choose a password
+            </span>
+            <input
+              type="password"
+              name="password"
+              autocomplete="new-password"
+              required
+              class="focusable w-full rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+            />
+            <span class="text-[12px] text-on-surface-variant">
+              At least <span data-bind="min-length">10</span> characters. Use something only you know.
+            </span>
+          </label>
+
+          <label class="flex items-start gap-3 rounded-lg bg-surface-container px-4 py-3">
+            <input type="checkbox" name="accept" required class="focusable mt-0.5 h-5 w-5 shrink-0 accent-secondary" />
+            <span class="text-body-sm text-on-surface-variant">
+              I have read and accept the
+              <a href="/terms" target="_blank" rel="noopener" class="underline underline-offset-2 hover:text-on-surface"
+                >terms of use</a
+              >.
+            </span>
+          </label>
+
+          <button
+            type="submit"
+            class="focusable w-full rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+          >
+            Create my account
+          </button>
+        </form>
+
+        <p
+          data-bind="signup-error"
+          hidden
+          role="alert"
+          class="mt-4 w-full rounded-lg bg-error-container px-4 py-3 text-center font-body-sm text-body-sm text-on-error-container"
+        ></p>
+
+        <p class="mt-6 text-center text-[12px] text-on-surface-variant">
+          Already have an account?
+          <a href="/login" class="underline underline-offset-2 hover:text-on-surface">Sign in</a>
+        </p>
+      </div>
+    </main>
+
+    <script src="/assets/app.js"></script>
+    <script src="/assets/signup.js"></script>
+  </body>
+</html>

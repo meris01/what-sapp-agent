@@ -1,0 +1,341 @@
+<div class="flex w-full flex-col gap-16 px-margin-mobile py-margin-desktop lg:px-margin-desktop">
+  <div class="flex max-w-3xl flex-col gap-4">
+    <div class="flex items-center gap-3">
+      <span class="h-2 w-2 rounded-full bg-secondary"></span>
+      <span class="font-label-caps text-label-caps uppercase tracking-widest text-secondary">System Settings</span>
+    </div>
+    <h1 class="font-display-lg text-display-lg tracking-tight text-on-surface max-md:text-headline-lg">
+      AI Configuration
+    </h1>
+    <p class="max-w-xl font-title-md text-title-md text-on-surface-variant">
+      Choose the model that handles your WhatsApp conversations.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-12 items-start gap-gutter">
+    <!-- Left: live system status -->
+    <div class="col-span-12 flex flex-col gap-8 lg:col-span-4">
+      <div
+        class="relative flex flex-col gap-6 overflow-hidden rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-secondary-container opacity-30 mix-blend-multiply blur-3xl"></div>
+        <div class="absolute -bottom-12 -left-12 h-48 w-48 rounded-full bg-primary-fixed opacity-30 mix-blend-multiply blur-3xl"></div>
+
+        <div class="z-10 flex items-center justify-between">
+          <span class="font-label-caps text-label-caps uppercase text-on-surface-variant">System status</span>
+          <svg class="icon icon-sm text-secondary"><use href="#i-shield" /></svg>
+        </div>
+
+        <div class="z-10 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <span class="font-body-sm text-body-sm text-on-surface-variant">WhatsApp</span>
+            <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="status-whatsapp">—</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="font-body-sm text-body-sm text-on-surface-variant">Automation</span>
+            <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="status-automation">—</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="font-body-sm text-body-sm text-on-surface-variant">Data retention</span>
+            <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="status-retention">—</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-body-sm text-body-sm text-on-surface-variant" title="Chats you replied to yourself. The assistant stays out of these for good.">
+              Yours to handle
+            </span>
+            <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="status-handoff">—</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-body-sm text-body-sm text-on-surface-variant" title="Customers who asked not to be contacted. Never messaged again.">
+              Opted out
+            </span>
+            <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="status-optout">—</span>
+          </div>
+        </div>
+
+        <div class="z-10 border-t border-outline-variant/20 pt-4">
+          <p class="mb-3 font-label-caps text-label-caps uppercase text-on-surface-variant">Recent activity</p>
+          <ul class="flex flex-col gap-2" data-bind="event-list">
+            <li class="font-body-sm text-body-sm text-on-surface-variant">Nothing yet.</li>
+          </ul>
+        </div>
+
+        <p class="relative z-10 font-body-sm text-body-sm leading-relaxed text-on-surface-variant">
+          Requests go directly from this server to OpenRouter with your own key. Conversations stay on this machine and
+          are deleted automatically after the retention window.
+        </p>
+      </div>
+    </div>
+
+    <!-- Right: forms -->
+    <div class="col-span-12 flex flex-col gap-8 lg:col-span-8">
+      <!-- API key -->
+      <form
+        data-form="api-key"
+        class="flex flex-col gap-8 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+            OpenRouter API key
+          </h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            Stored encrypted on this server and never shown again after saving.
+          </p>
+        </div>
+
+        <div class="flex w-full flex-col items-start gap-4 md:flex-row md:items-center">
+          <div class="group relative w-full flex-1">
+            <svg
+              class="icon icon-sm absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors group-focus-within:text-primary"
+            >
+              <use href="#i-key" />
+            </svg>
+            <input
+              type="password"
+              name="apiKey"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="sk-or-v1-…"
+              aria-label="OpenRouter API key"
+              class="focusable w-full rounded-lg bg-surface-container py-3 pl-12 pr-4 font-body-base text-body-base text-on-surface shadow-none transition-all focus:bg-surface-container-lowest focus:outline-none focus:shadow-[0_4px_20px_rgba(0,0,0,0.05),0_0_1px_rgba(0,0,0,0.1)]"
+            />
+          </div>
+          <button
+            type="submit"
+            class="focusable whitespace-nowrap rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+          >
+            Save API key
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <div
+            class="flex items-center gap-3 rounded-lg bg-surface-container px-4 py-3"
+            data-bind="api-key-status"
+          >
+            <span class="relative flex h-3 w-3">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-outline-variant opacity-75" data-bind="api-key-ping"></span>
+              <span class="relative inline-flex h-3 w-3 rounded-full bg-outline-variant" data-bind="api-key-dot"></span>
+            </span>
+            <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="api-key-text">
+              No API key saved
+            </span>
+          </div>
+          <button
+            type="button"
+            data-action="remove-key"
+            hidden
+            class="focusable flex items-center gap-2 rounded-lg px-4 py-3 text-body-sm text-error transition-colors hover:bg-error-container"
+          >
+            <svg class="icon icon-sm"><use href="#i-trash" /></svg>
+            Remove
+          </button>
+        </div>
+      </form>
+
+      <!-- Model -->
+      <form
+        data-form="model"
+        class="flex flex-col gap-8 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+            Model configuration
+          </h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            Any model id from openrouter.ai/models, for example
+            <code class="rounded bg-surface-container px-1.5 py-0.5">anthropic/claude-sonnet-4</code>.
+          </p>
+        </div>
+
+        <div class="flex w-full flex-col items-start gap-4 md:flex-row md:items-center">
+          <div class="group relative w-full flex-1">
+            <svg
+              class="icon icon-sm absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors group-focus-within:text-primary"
+            >
+              <use href="#i-bot" />
+            </svg>
+            <input
+              type="text"
+              name="model"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Enter OpenRouter model"
+              aria-label="OpenRouter model"
+              class="focusable w-full rounded-lg bg-surface-container py-3 pl-12 pr-4 font-body-base text-body-base text-on-surface shadow-none transition-all focus:bg-surface-container-lowest focus:outline-none focus:shadow-[0_4px_20px_rgba(0,0,0,0.05),0_0_1px_rgba(0,0,0,0.1)]"
+            />
+          </div>
+          <button
+            type="submit"
+            class="focusable whitespace-nowrap rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+          >
+            Save model
+          </button>
+          <button
+            type="button"
+            data-action="test-model"
+            class="focusable flex items-center gap-2 whitespace-nowrap rounded-lg bg-surface-container px-6 py-3 font-body-base text-body-sm text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+          >
+            <svg class="icon icon-sm" data-bind="test-icon"><use href="#i-sync" /></svg>
+            Test connection
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3 self-start rounded-lg bg-surface-container px-4 py-3" data-bind="model-status">
+          <span class="relative flex h-3 w-3">
+            <span class="relative inline-flex h-3 w-3 rounded-full bg-outline-variant" data-bind="model-dot"></span>
+          </span>
+          <span class="font-body-sm text-body-sm font-medium text-on-surface" data-bind="model-text">Not tested yet</span>
+        </div>
+      </form>
+
+      <!-- Follow-ups -->
+      <form
+        data-form="followups"
+        class="flex flex-col gap-8 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Follow-ups</h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            If a customer goes quiet after the assistant replies, send a limited number of check-ins, then stop.
+          </p>
+        </div>
+
+        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-surface-container px-4 py-3">
+          <span class="flex items-center gap-3">
+            <svg class="icon icon-sm text-on-surface-variant"><use href="#i-clock" /></svg>
+            <span class="text-body-sm text-on-surface">Send automatic follow-ups</span>
+          </span>
+          <input type="checkbox" name="enabled" class="focusable h-5 w-5 accent-secondary" />
+        </label>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-2">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Maximum follow-ups
+            </span>
+            <input
+              type="number"
+              name="maxFollowups"
+              min="0"
+              max="5"
+              step="1"
+              class="focusable rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+            />
+          </label>
+          <label class="flex flex-col gap-2">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Delays in minutes
+            </span>
+            <input
+              type="text"
+              name="delaysMinutes"
+              inputmode="numeric"
+              placeholder="180, 1440"
+              class="focusable rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+            />
+            <span class="text-[12px] text-on-surface-variant">
+              One value per follow-up, counted from the last message. 180, 1440 means 3 hours, then a day later.
+            </span>
+          </label>
+        </div>
+
+        <div class="flex flex-col gap-4 rounded-lg bg-surface-container px-4 py-3">
+          <label class="flex cursor-pointer items-center justify-between gap-4">
+            <span class="text-body-sm text-on-surface">Hold follow-ups during quiet hours</span>
+            <input type="checkbox" name="quietEnabled" class="focusable h-5 w-5 accent-secondary" />
+          </label>
+          <div class="flex flex-wrap items-center gap-4">
+            <label class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              From
+              <input
+                type="time"
+                name="quietStart"
+                class="focusable rounded-lg bg-surface-container-lowest px-3 py-2 text-body-sm text-on-surface focus:outline-none"
+              />
+            </label>
+            <label class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              To
+              <input
+                type="time"
+                name="quietEnd"
+                class="focusable rounded-lg bg-surface-container-lowest px-3 py-2 text-body-sm text-on-surface focus:outline-none"
+              />
+            </label>
+            <span class="text-[12px] text-on-surface-variant">Server time</span>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          class="focusable self-start rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+        >
+          Save follow-up settings
+        </button>
+      </form>
+
+      <!-- Disclosure -->
+      <form
+        data-form="disclosure"
+        class="flex flex-col gap-8 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+            Telling people it is automated
+          </h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            Sent once, as its own message, before the first reply a customer ever gets. Several places now require
+            people to be told they are talking to an AI &mdash; the EU AI Act since August 2026, and bot-disclosure laws
+            in California and elsewhere. Turning this off is a decision to take that risk.
+          </p>
+        </div>
+
+        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-surface-container px-4 py-3">
+          <span class="flex items-center gap-3">
+            <svg class="icon icon-sm text-on-surface-variant"><use href="#i-info" /></svg>
+            <span class="text-body-sm text-on-surface">Tell customers the assistant is automated</span>
+          </span>
+          <input type="checkbox" name="enabled" class="focusable h-5 w-5 accent-secondary" />
+        </label>
+
+        <label class="flex flex-col gap-2">
+          <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+            What it says
+          </span>
+          <textarea
+            name="text"
+            rows="2"
+            maxlength="300"
+            class="focusable resize-none rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+          ></textarea>
+        </label>
+
+        <button
+          type="submit"
+          class="focusable self-start rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+        >
+          Save disclosure
+        </button>
+      </form>
+
+      <!-- Automation switch -->
+      <div
+        class="flex flex-col gap-6 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Automation</h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            Pause to stop all replies and follow-ups immediately. Incoming messages are still recorded for context.
+          </p>
+        </div>
+        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-surface-container px-4 py-3">
+          <span class="flex items-center gap-3">
+            <svg class="icon icon-sm text-on-surface-variant"><use href="#i-chat" /></svg>
+            <span class="text-body-sm text-on-surface" data-bind="paused-label">Automation active</span>
+          </span>
+          <input type="checkbox" data-action="toggle-paused" class="focusable h-5 w-5 accent-secondary" />
+        </label>
+      </div>
+    </div>
+  </div>
+</div>

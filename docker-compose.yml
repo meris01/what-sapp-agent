@@ -1,0 +1,13 @@
+services:
+  whatsapp-agent:
+    build: .
+    restart: unless-stopped
+    # Published on loopback only. Put a TLS reverse proxy in front to expose it.
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: UTC
+      # Generated secrets live on the volume so they survive image rebuilds.
+      ENV_FILE: /data/.env

@@ -1,0 +1,169 @@
+<div class="relative flex h-full w-full flex-col overflow-hidden bg-background">
+  <div
+    class="pointer-events-none absolute right-[-10%] top-[-20%] h-[600px] w-[600px] rounded-full bg-secondary-fixed/20 blur-[100px]"
+  ></div>
+
+  <section
+    class="relative z-10 mx-auto mb-16 mt-12 flex w-full max-w-container-max flex-col items-center px-margin-mobile text-center md:mt-24 md:px-margin-desktop"
+  >
+    <div class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-container-high shadow-sm">
+      <svg class="icon icon-lg text-on-surface"><use href="#i-qr" /></svg>
+    </div>
+    <h1 class="mb-4 font-display-lg text-display-lg text-on-surface max-md:text-headline-lg" data-bind="page-title">
+      Connect WhatsApp
+    </h1>
+    <p class="max-w-[420px] font-body-base text-body-base text-on-surface-variant" data-bind="page-subtitle">
+      Scan the QR code with WhatsApp on your phone to link your account.
+    </p>
+  </section>
+
+  <section
+    class="relative z-10 mx-auto flex w-full max-w-container-max flex-col items-center px-margin-mobile pb-24 md:px-margin-desktop"
+  >
+    <div
+      class="relative flex w-full max-w-[400px] flex-col items-center rounded-[32px] bg-surface-container-lowest/80 p-8 shadow-[0_8px_40px_rgba(0,0,0,0.04),0_0_2px_rgba(0,0,0,0.06)] backdrop-blur-xl"
+    >
+      <div
+        class="absolute top-[-16px] flex items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-high px-4 py-2 shadow-sm"
+      >
+        <span class="h-2.5 w-2.5 rounded-full bg-outline-variant" data-bind="badge-dot"></span>
+        <span class="font-label-caps text-label-caps tracking-wider text-on-surface-variant" data-bind="badge-text">
+          Starting…
+        </span>
+      </div>
+
+      <!-- QR / status panel -->
+      <div
+        class="relative mb-8 mt-2 flex h-64 w-64 items-center justify-center overflow-hidden rounded-2xl bg-surface-container-highest p-4 shadow-inner"
+      >
+        <img
+          data-bind="qr-image"
+          hidden
+          alt="WhatsApp linking QR code"
+          class="h-full w-full rounded-lg bg-surface-container-lowest object-contain"
+        />
+
+        <div data-bind="qr-placeholder" class="flex flex-col items-center gap-4 px-6 text-center">
+          <svg class="icon icon-lg animate-spin text-on-surface-variant" data-bind="placeholder-icon">
+            <use href="#i-sync" />
+          </svg>
+          <p class="font-body-sm text-body-sm text-on-surface-variant" data-bind="placeholder-text">
+            Preparing a QR code…
+          </p>
+        </div>
+      </div>
+
+      <!-- Linked-device panel -->
+      <div data-bind="linked-panel" hidden class="mb-8 w-full rounded-2xl bg-secondary/10 p-5 text-center">
+        <p class="font-label-caps text-label-caps uppercase tracking-widest text-on-secondary-container">Linked device</p>
+        <p class="mt-2 font-title-md text-title-md text-on-surface" data-bind="linked-number">—</p>
+        <p class="mt-1 text-body-sm text-on-surface-variant" data-bind="linked-since">&nbsp;</p>
+      </div>
+
+      <div data-bind="instructions-card" class="w-full rounded-2xl bg-surface-container-low p-5">
+        <h2 class="mb-4 border-b border-outline-variant/20 pb-2 font-title-md text-title-md text-on-surface">
+          Instructions
+        </h2>
+        <ol
+          class="list-inside list-decimal space-y-3 font-body-sm text-body-sm text-on-surface-variant marker:font-medium marker:text-primary"
+        >
+          <li>Open WhatsApp on your phone</li>
+          <li>Tap <strong>Menu</strong> (Android) or <strong>Settings</strong> (iPhone)</li>
+          <li>Select <strong>Linked Devices</strong></li>
+          <li>Tap <strong>Link a Device</strong> and scan the code</li>
+        </ol>
+      </div>
+
+      <div class="mt-6 flex w-full flex-col gap-3">
+        <button
+          type="button"
+          data-action="refresh-qr"
+          class="focusable flex items-center justify-center gap-2 rounded-lg bg-surface-container px-6 py-3 text-body-sm text-on-surface transition-colors hover:bg-surface-container-high"
+        >
+          <svg class="icon icon-sm"><use href="#i-sync" /></svg>
+          Refresh connection
+        </button>
+        <button
+          type="button"
+          data-action="unlink"
+          hidden
+          class="focusable flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-body-sm text-error transition-colors hover:bg-error-container"
+        >
+          <svg class="icon icon-sm"><use href="#i-unlink" /></svg>
+          Unlink this device
+        </button>
+      </div>
+    </div>
+
+    <p
+      data-bind="connection-error"
+      hidden
+      class="mt-6 max-w-[400px] rounded-xl bg-error-container px-4 py-3 text-center font-body-sm text-body-sm text-on-error-container"
+    ></p>
+
+    <!-- Health strip -->
+    <div class="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-[28px] bg-surface-container-lowest px-6 py-4 shadow-sm">
+      <div class="flex items-center gap-3 opacity-40 transition-opacity" data-health="connected">
+        <span class="h-3 w-3 rounded-full bg-secondary-fixed-dim"></span>
+        <span class="font-body-sm text-body-sm text-on-surface-variant">Connected</span>
+      </div>
+      <div class="h-4 w-px bg-outline-variant/30 max-sm:hidden"></div>
+      <div class="flex items-center gap-3 opacity-40 transition-opacity" data-health="qr">
+        <span class="h-3 w-3 rounded-full bg-primary-fixed-dim"></span>
+        <span class="font-body-sm text-body-sm text-on-surface-variant">Waiting for scan</span>
+      </div>
+      <div class="h-4 w-px bg-outline-variant/30 max-sm:hidden"></div>
+      <div class="flex items-center gap-3 opacity-40 transition-opacity" data-health="reconnecting">
+        <span class="h-3 w-3 rounded-full bg-warning"></span>
+        <span class="font-body-sm text-body-sm text-on-surface-variant">Reconnecting</span>
+      </div>
+      <div class="h-4 w-px bg-outline-variant/30 max-sm:hidden"></div>
+      <div class="flex items-center gap-3 opacity-40 transition-opacity" data-health="disconnected">
+        <span class="h-3 w-3 rounded-full bg-error"></span>
+        <span class="font-body-sm text-body-sm text-on-surface-variant">Disconnected</span>
+      </div>
+    </div>
+
+    <!-- Readiness checklist -->
+    <div class="mt-8 w-full max-w-[560px] rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
+      <h2 class="mb-4 font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+        Automation readiness
+      </h2>
+      <ul class="space-y-3">
+        <li class="flex items-center justify-between gap-4">
+          <span class="flex items-center gap-3 text-body-sm text-on-surface">
+            <svg class="icon icon-sm text-on-surface-variant" data-check="whatsapp"><use href="#i-info" /></svg>
+            WhatsApp linked
+          </span>
+          <span class="text-body-sm text-on-surface-variant" data-bind="check-whatsapp">—</span>
+        </li>
+        <li class="flex items-center justify-between gap-4">
+          <span class="flex items-center gap-3 text-body-sm text-on-surface">
+            <svg class="icon icon-sm text-on-surface-variant" data-check="key"><use href="#i-info" /></svg>
+            OpenRouter key and model
+          </span>
+          <a href="/settings" class="text-body-sm text-on-surface-variant underline-offset-2 hover:underline" data-bind="check-key">—</a>
+        </li>
+        <li class="flex items-center justify-between gap-4">
+          <span class="flex items-center gap-3 text-body-sm text-on-surface">
+            <svg class="icon icon-sm text-on-surface-variant" data-check="instructions"><use href="#i-info" /></svg>
+            Business instructions
+          </span>
+          <a
+            href="/instructions"
+            class="text-body-sm text-on-surface-variant underline-offset-2 hover:underline"
+            data-bind="check-instructions"
+            >—</a
+          >
+        </li>
+        <li class="flex items-center justify-between gap-4 border-t border-outline-variant/20 pt-3">
+          <span class="flex items-center gap-3 text-body-sm text-on-surface">
+            <svg class="icon icon-sm text-on-surface-variant" data-check="automation"><use href="#i-info" /></svg>
+            Replying to customers
+          </span>
+          <span class="text-body-sm font-medium text-on-surface" data-bind="check-automation">—</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+</div>

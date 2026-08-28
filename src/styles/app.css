@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  main > :first-child {
+    margin-top: 0 !important;
+  }
+
+  main > :last-child {
+    margin-bottom: 0 !important;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  .icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+  }
+
+  .icon-sm {
+    width: 18px;
+    height: 18px;
+  }
+
+  .icon-lg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .icon-xl {
+    width: 120px;
+    height: 120px;
+    stroke-width: 1;
+  }
+
+  /* Focus ring that stays visible on the dark primary buttons too. */
+  .focusable:focus-visible {
+    outline: 2px solid theme('colors.secondary');
+    outline-offset: 2px;
+  }
+}

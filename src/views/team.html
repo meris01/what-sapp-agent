@@ -1,0 +1,161 @@
+<div class="flex w-full flex-col gap-12 px-margin-mobile py-margin-desktop lg:px-margin-desktop">
+  <div class="flex max-w-3xl flex-col gap-4">
+    <div class="flex items-center gap-3">
+      <span class="h-2 w-2 rounded-full bg-secondary"></span>
+      <span class="font-label-caps text-label-caps uppercase tracking-widest text-secondary">Access</span>
+    </div>
+    <h1 class="font-display-lg text-display-lg tracking-tight text-on-surface max-md:text-headline-lg">Team</h1>
+    <p class="max-w-xl font-title-md text-title-md text-on-surface-variant">
+      Everyone who can reach this dashboard gets their own account, so nobody shares a password and every change is
+      attributable.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-12 items-start gap-gutter">
+    <!-- Members -->
+    <div class="col-span-12 flex flex-col gap-8 lg:col-span-7">
+      <div
+        class="flex flex-col gap-6 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Members</h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            Owners can invite and remove people. Members can run the assistant but not change who has access.
+          </p>
+        </div>
+
+        <ul class="flex flex-col divide-y divide-outline-variant/20" data-bind="member-list">
+          <li class="py-3 font-body-sm text-body-sm text-on-surface-variant">Loading…</li>
+        </ul>
+      </div>
+
+      <!-- Change your own password -->
+      <form
+        data-form="password"
+        class="flex flex-col gap-6 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+            Your password
+          </h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            Changing it does not sign you out of this browser.
+          </p>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1.5">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Current
+            </span>
+            <input
+              type="password"
+              name="currentPassword"
+              autocomplete="current-password"
+              class="focusable rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+            />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">New</span>
+            <input
+              type="password"
+              name="newPassword"
+              autocomplete="new-password"
+              class="focusable rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
+            />
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          class="focusable self-start rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+        >
+          Change password
+        </button>
+      </form>
+    </div>
+
+    <!-- Invites -->
+    <div class="col-span-12 flex flex-col gap-8 lg:col-span-5">
+      <div
+        data-bind="invite-card"
+        class="flex flex-col gap-6 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      >
+        <div class="flex flex-col gap-2">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+            Invite someone
+          </h2>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">
+            There is no open sign-up. You create a single-use link, send it to the person, and it expires in seven days.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            data-action="invite"
+            data-role="member"
+            class="focusable rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
+          >
+            Invite a member
+          </button>
+          <button
+            type="button"
+            data-action="invite"
+            data-role="owner"
+            class="focusable rounded-lg bg-surface-container px-6 py-3 font-body-base text-body-sm text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+          >
+            Invite an owner
+          </button>
+        </div>
+
+        <!-- The generated link, shown once -->
+        <div data-bind="invite-result" hidden class="flex flex-col gap-3 rounded-lg bg-secondary/10 p-4">
+          <p class="font-body-sm text-body-sm font-medium text-on-surface">
+            Send this link. It works once, and you will not see it again.
+          </p>
+          <input
+            type="text"
+            readonly
+            data-bind="invite-link"
+            class="focusable w-full select-all rounded-lg bg-surface-container-lowest px-3 py-2 font-body-sm text-body-sm text-on-surface focus:outline-none"
+          />
+          <button
+            type="button"
+            data-action="copy-invite"
+            class="focusable self-start rounded-lg bg-surface-container px-4 py-2 text-body-sm text-on-surface transition-colors hover:bg-surface-container-high"
+          >
+            Copy link
+          </button>
+        </div>
+
+        <div class="border-t border-outline-variant/20 pt-4">
+          <div class="mb-3 flex items-center justify-between">
+            <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Unused invites
+            </span>
+            <button
+              type="button"
+              data-action="revoke-invites"
+              class="focusable rounded-lg px-3 py-1.5 text-body-sm text-error transition-colors hover:bg-error-container"
+            >
+              Revoke all
+            </button>
+          </div>
+          <ul class="flex flex-col gap-2" data-bind="invite-list">
+            <li class="font-body-sm text-body-sm text-on-surface-variant">None outstanding.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-primary p-6 text-on-primary shadow-sm">
+        <span class="font-label-caps text-label-caps uppercase tracking-wider opacity-80">Why invite-only</span>
+        <p class="mt-2 font-body-sm text-body-sm leading-relaxed opacity-90">
+          This server controls one live WhatsApp number and holds every customer conversation on it. Open registration
+          would mean anyone who finds the address could take it over, so accounts exist only where an owner has handed
+          out a link.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
