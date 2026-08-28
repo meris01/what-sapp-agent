@@ -58,6 +58,14 @@ function copyInto(source, destination) {
   assertSafe(path.relative(ROOT, source));
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.copyFileSync(source, destination);
+  // Shell scripts must stay runnable, whatever the build machine's umask is.
+  if (source.endsWith('.sh')) {
+    try {
+      fs.chmodSync(destination, 0o755);
+    } catch {
+      /* best effort on platforms without POSIX modes */
+    }
+  }
 }
 
 function build() {

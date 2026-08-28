@@ -56,6 +56,10 @@ for item in src public scripts package.json package-lock.json .env.example READM
 done
 say "copied application files to ${INSTALL_DIR}"
 
+# Git does not always preserve the executable bit; make sure the follow-up
+# script is runnable before anyone reaches for it.
+chmod +x "$INSTALL_DIR"/scripts/*.sh 2>/dev/null || true
+
 mkdir -p "$INSTALL_DIR/data"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 chmod 700 "$INSTALL_DIR/data"
