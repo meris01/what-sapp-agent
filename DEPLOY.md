@@ -44,6 +44,22 @@ ssh -N -L 3000:127.0.0.1:3000 you@your-server
 
 Then open <http://127.0.0.1:3000>.
 
+### Giving it a public HTTPS URL
+
+Only if you need one — the tunnel above is safer and costs nothing. You need a domain
+with an A record pointing at the server; a certificate cannot be issued for a bare IP.
+
+```bash
+sudo ./scripts/setup-https.sh dashboard.yourdomain.com
+```
+
+That installs Caddy, gets a Let's Encrypt certificate, forwards to the agent on
+loopback, and switches on `TRUST_PROXY` and `COOKIE_SECURE` so the session cookie is
+marked secure. The agent itself never listens on a public interface.
+
+**Do not serve the dashboard over plain HTTP.** The password would cross the network in
+the clear, and it protects every customer conversation plus a live WhatsApp session.
+
 Day to day:
 
 ```bash
