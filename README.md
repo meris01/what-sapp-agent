@@ -30,6 +30,17 @@ There is no CRM, no analytics, no bulk sending, no contact management.
 
 ---
 
+## Deploying
+
+It needs a host that runs a normal, always-on process with a real disk: a small VPS, or
+Render, Railway or Fly.io. **Serverless platforms cannot run it** — Vercel, Netlify and
+Lambda give you a function that dies after each request, with no writable disk and
+nothing running in between, so there is nowhere to hold the WhatsApp connection. The app
+detects those and says so at startup rather than failing with an opaque 500.
+
+`render.yaml` and `fly.toml` are in the repo, and `scripts/install.sh` covers the VPS
+route. Full instructions in **[DEPLOY.md](DEPLOY.md)**.
+
 ## Packaging it for a client
 
 ```bash

@@ -1,0 +1,39 @@
+# Render deploys this as a persistent container with a disk attached, which is
+# what the agent needs. Point Render at this repo and it picks this file up.
+#
+# Set ADMIN_PASSWORD in the Render dashboard before the first deploy.
+
+services:
+  - type: web
+    name: whatsapp-agent
+    runtime: docker
+    plan: starter
+    healthCheckPath: /login
+
+    # Conversations, the linked WhatsApp session and the generated keys all
+    # live here. Without a disk they are wiped on every deploy.
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      # Render terminates TLS and routes to the container, so it must listen
+      # on all interfaces rather than loopback.
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: 'true'
+      - key: COOKIE_SECURE
+        value: 'true'
+      - key: DATA_DIR
+        value: /data
+      - key: ENV_FILE
+        value: /data/.env
+      - key: TZ
+        value: UTC
+      - key: ADMIN_USERNAME
+        value: admin
+      # Set this in the dashboard; never commit it.
+      - key: ADMIN_PASSWORD
+        sync: false

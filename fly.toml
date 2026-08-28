@@ -1,0 +1,39 @@
+# Fly.io. Create the volume once, then deploy:
+#
+#   fly launch --no-deploy
+#   fly volumes create data --size 1
+#   fly secrets set ADMIN_PASSWORD=your-password
+#   fly deploy
+
+app = "whatsapp-agent"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  HOST = "0.0.0.0"
+  PORT = "3000"
+  TRUST_PROXY = "true"
+  COOKIE_SECURE = "true"
+  DATA_DIR = "/data"
+  ENV_FILE = "/data/.env"
+  ADMIN_USERNAME = "admin"
+  TZ = "UTC"
+
+# Conversations and the WhatsApp session. Without this they vanish on deploy.
+[mounts]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # The WhatsApp connection must stay open, so the machine never sleeps.
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+# One machine only: two would both try to hold the same WhatsApp session.
+[deploy]
+  strategy = "immediate"

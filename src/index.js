@@ -1,5 +1,9 @@
 'use strict';
 
+// Before anything touches the disk: fail clearly if this is a platform the
+// agent cannot run on at all.
+require('./lib/platform').assertSupportedPlatform();
+
 const { bootstrapSecrets } = require('./lib/env');
 const bootstrap = bootstrapSecrets();
 
