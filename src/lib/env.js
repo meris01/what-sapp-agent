@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { ENV_FILE } = require('./paths');
+const { renderEnv, templateKeys, TEMPLATE_MARKER } = require('./env-template');
 
 function parseEnvFile(contents) {
   const out = {};
@@ -119,6 +120,55 @@ function verifyPassword(password, stored) {
   }
 }
 
+/* --------------------------- the documented file --------------------------- */
+
+/** Reads every key currently in .env, so a rewrite never loses a value. */
+function currentValues() {
+  if (!fs.existsSync(ENV_FILE)) return {};
+  return parseEnvFile(fs.readFileSync(ENV_FILE, 'utf8'));
+}
+
+/**
+ * Writes .env in the documented layout: every setting present with its
+ * default, the operator's own values preserved, and the password line ready
+ * at the top. Anything the template does not know about is kept at the end
+ * rather than silently dropped.
+ */
+function writeDocumentedEnv(extraValues = {}) {
+  const values = { ...currentValues(), ...extraValues };
+  const known = new Set(templateKeys());
+
+  let contents = renderEnv(values);
+
+  const unknown = Object.entries(values).filter(([key]) => !known.has(key));
+  if (unknown.length) {
+    const rule = '# ---------------------------------------------------------------------------';
+    contents += [
+      '',
+      rule,
+      '# YOUR OWN SETTINGS',
+      rule,
+      '',
+      ...unknown.map(([key, value]) => `${key}=${value}`),
+      '',
+    ].join('\n');
+  }
+
+  fs.mkdirSync(path.dirname(ENV_FILE), { recursive: true });
+  fs.writeFileSync(ENV_FILE, contents, { mode: 0o600 });
+  try {
+    fs.chmodSync(ENV_FILE, 0o600);
+  } catch {
+    /* best effort on platforms without POSIX modes */
+  }
+}
+
+/** True when .env is still the old bare list rather than the documented one. */
+function needsDocumenting() {
+  if (!fs.existsSync(ENV_FILE)) return true;
+  return !fs.readFileSync(ENV_FILE, 'utf8').includes(TEMPLATE_MARKER);
+}
+
 /* ------------------------------- bootstrap -------------------------------- */
 
 /**
@@ -152,7 +202,7 @@ function bootstrapSecrets() {
     // plaintext line is dropped so it never lingers on disk.
     process.env.ADMIN_PASSWORD_HASH = hashPassword(process.env.ADMIN_PASSWORD);
     generated.ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
-    removeKeys.push('ADMIN_PASSWORD');
+    generated.ADMIN_PASSWORD = '';
     delete process.env.ADMIN_PASSWORD;
     adminPasswordProvided = true;
   } else if (!process.env.ADMIN_PASSWORD_HASH) {
@@ -161,12 +211,18 @@ function bootstrapSecrets() {
     generated.ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
   }
 
-  if (Object.keys(generated).length || removeKeys.length) writeEnvEntries(generated, removeKeys);
+  // A fresh install, or one still on the old bare format, gets the fully
+  // documented file. After that only the changed keys are touched, so an
+  // operator's own comments and ordering survive.
+  if (needsDocumenting()) writeDocumentedEnv(generated);
+  else if (Object.keys(generated).length || removeKeys.length) writeEnvEntries(generated, removeKeys);
 
   return { generatedPassword, adminPasswordProvided, adminPasswordHash: process.env.ADMIN_PASSWORD_HASH };
 }
 
 module.exports = {
+  writeDocumentedEnv,
+  needsDocumenting,
   loadEnvFile,
   bootstrapSecrets,
   writeEnvEntries,

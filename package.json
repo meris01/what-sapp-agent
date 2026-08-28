@@ -12,12 +12,13 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "build": "npm run build:html && npm run build:css",
+    "build": "npm run build:html && npm run build:css && npm run build:env",
     "build:html": "node scripts/build-html.js",
     "build:css": "tailwindcss -c tailwind.config.js -i ./src/styles/app.css -o ./public/assets/app.css --minify",
     "test": "node --test \"tests/*.test.js\"",
     "forget": "node scripts/forget.js",
-    "package": "node scripts/package.js"
+    "package": "node scripts/package.js",
+    "build:env": "node scripts/build-env-example.js"
   },
   "dependencies": {
     "baileys": "6.7.24",
