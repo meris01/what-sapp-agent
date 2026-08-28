@@ -21,7 +21,27 @@ Three good options below.
 
 ---
 
-## A small VPS — recommended
+## One command
+
+On a fresh Ubuntu or Debian server, as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/meris01/what-sapp-agent/main/scripts/bootstrap.sh | bash -s chat.example.com
+```
+
+Installs Node if missing, fetches the code, installs the service, points a certificate at
+your subdomain, and prints the sign-in details. Re-run it any time to update: it never
+touches the database, the WhatsApp session or `.env`.
+
+Leave the domain off and it stays on loopback, to be reached over an SSH tunnel.
+
+Point the subdomain at the server **before** running it — an A record for `chat` at your
+DNS provider, aimed at the server's IP. A certificate cannot be issued otherwise.
+
+Piping a script into a root shell is worth a glance first if you like:
+`curl -fsSL <url> | less`.
+
+## A small VPS, step by step
 
 Cheapest, simplest, and the same thing your clients will run. Hetzner, DigitalOcean,
 Vultr and similar all do this for a few pounds a month. Any distribution with Node 20+.
