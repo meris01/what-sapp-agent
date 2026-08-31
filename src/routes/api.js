@@ -251,7 +251,7 @@ function createApiRouter({ wa, agent }) {
     if (!model || model.length > settings.LIMITS.model || !MODEL_RE.test(model)) {
       return res.status(400).json({
         ok: false,
-        error: 'Enter a valid OpenRouter model id, for example anthropic/claude-sonnet-4.',
+        error: 'Enter a valid OpenRouter model id, for example openai/gpt-5.6-luna.',
       });
     }
     settings.setModel(model);

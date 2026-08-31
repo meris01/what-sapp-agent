@@ -1,0 +1,820 @@
+<title>WhatsApp Assistant Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+  :root {
+    /* Light. A ground biased faintly green so it belongs to the subject. */
+    --ground: #f6f8f6;
+    --raised: #ffffff;
+    --sunken: #eef1ee;
+    --ink: #12171a;
+    --ink-soft: #4a5854;
+    --ink-faint: #7d8b86;
+    --rule: #dde3df;
+    --accent: #0f6e52;
+    --accent-soft: #e2efe9;
+    --accent-ink: #0b5340;
+    --warn: #a8630b;
+    --warn-soft: #fbf0dd;
+    --stop: #9d2b22;
+    --stop-soft: #fbe6e3;
+    --term-bg: #101815;
+    --term-ink: #d6e4dd;
+    --term-dim: #728a80;
+    --shadow: 0 1px 2px rgba(18, 23, 26, .05), 0 8px 24px -12px rgba(18, 23, 26, .14);
+
+    --measure: 66ch;
+    --step: clamp(1.5rem, 4vw, 2.75rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1412;
+      --raised: #151d1a;
+      --sunken: #1b2521;
+      --ink: #e8efeb;
+      --ink-soft: #a4b3ad;
+      --ink-faint: #74857e;
+      --rule: #26322d;
+      --accent: #4cc79b;
+      --accent-soft: #14312a;
+      --accent-ink: #7fdcb8;
+      --warn: #e0a34b;
+      --warn-soft: #33260f;
+      --stop: #e8837a;
+      --stop-soft: #341a17;
+      --term-bg: #070c0a;
+      --term-ink: #cfe0d8;
+      --term-dim: #6a8077;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e1412;
+    --raised: #151d1a;
+    --sunken: #1b2521;
+    --ink: #e8efeb;
+    --ink-soft: #a4b3ad;
+    --ink-faint: #74857e;
+    --rule: #26322d;
+    --accent: #4cc79b;
+    --accent-soft: #14312a;
+    --accent-ink: #7fdcb8;
+    --warn: #e0a34b;
+    --warn-soft: #33260f;
+    --stop: #e8837a;
+    --stop-soft: #341a17;
+    --term-bg: #070c0a;
+    --term-ink: #cfe0d8;
+    --term-dim: #6a8077;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 0 clamp(1.1rem, 4vw, 2.5rem) 6rem;
+  }
+
+  h1, h2, h3 {
+    font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    text-wrap: balance;
+    letter-spacing: -.02em;
+    margin: 0;
+  }
+
+  p { max-width: var(--measure); margin: 0; }
+  ul, ol { max-width: var(--measure); margin: 0; padding-left: 1.15rem; }
+  li + li { margin-top: .4rem; }
+  strong { font-weight: 600; }
+  a { color: var(--accent-ink); }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- masthead ---------- */
+
+  header.top {
+    border-bottom: 1px solid var(--rule);
+    background: var(--raised);
+    padding: clamp(2.6rem, 7vw, 4.5rem) 0 clamp(2rem, 5vw, 3rem);
+    margin-bottom: clamp(2rem, 5vw, 3.5rem);
+  }
+  header.top .wrap { padding-bottom: 0; display: flex; flex-direction: column; gap: 1.25rem; }
+  header.top h1 { font-size: clamp(2.1rem, 6vw, 3.4rem); line-height: 1.05; }
+  header.top p.lede { font-size: clamp(1.05rem, 2.2vw, 1.2rem); color: var(--ink-soft); }
+
+  .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; }
+  .badge {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .72rem;
+    padding: .3rem .6rem;
+    border-radius: 3px;
+    background: var(--sunken);
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+  }
+
+  /* ---------- steps ---------- */
+
+  .step { display: grid; grid-template-columns: 3.2rem 1fr; gap: 0 1.4rem; margin-bottom: var(--step); }
+  .step-num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    border-radius: 50%;
+    width: 2.4rem; height: 2.4rem;
+    display: grid; place-items: center;
+    margin-top: .1rem;
+  }
+  .step-body { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+  .step h2 { font-size: clamp(1.35rem, 3.2vw, 1.75rem); }
+  .step-time { font-size: .85rem; color: var(--ink-faint); margin-top: .15rem; }
+
+  @media (max-width: 620px) {
+    .step { grid-template-columns: 1fr; gap: .9rem; }
+    .step-num { width: 2.1rem; height: 2.1rem; font-size: .85rem; }
+  }
+
+  /* ---------- terminal ---------- */
+
+  .term {
+    background: var(--term-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: .45rem;
+    padding: .55rem .8rem;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+  }
+  .term-dot { width: .6rem; height: .6rem; border-radius: 50%; background: #3d4a45; }
+  .term-title {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .68rem; color: var(--term-dim); margin-left: .4rem;
+  }
+  .term pre {
+    margin: 0; padding: .9rem 1rem 1.1rem;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .82rem; line-height: 1.7;
+    color: var(--term-ink);
+  }
+  .term .prompt { color: var(--accent); user-select: none; }
+  .term .dim { color: var(--term-dim); }
+  .term .ok { color: #6fd3a8; }
+
+  /* ---------- callouts ---------- */
+
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: .85rem 1.1rem;
+    border-radius: 0 6px 6px 0;
+    max-width: var(--measure);
+  }
+  .note.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .note.stop { border-color: var(--stop); background: var(--stop-soft); }
+  .note p { font-size: .95rem; }
+  .note .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .66rem; text-transform: uppercase; letter-spacing: .12em;
+    display: block; margin-bottom: .35rem; color: var(--accent-ink);
+  }
+  .note.warn .label { color: var(--warn); }
+  .note.stop .label { color: var(--stop); }
+
+  /* ---------- app screen illustrations ---------- */
+
+  .screen {
+    background: var(--raised);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    max-width: 460px;
+  }
+  .screen-chrome {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .5rem .7rem;
+    background: var(--sunken);
+    border-bottom: 1px solid var(--rule);
+  }
+  .screen-url {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .66rem; color: var(--ink-faint);
+    background: var(--ground);
+    padding: .18rem .5rem; border-radius: 3px;
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .screen-inner { padding: 1.4rem 1.2rem; display: flex; flex-direction: column; gap: .8rem; align-items: center; }
+  .screen h4 {
+    font-family: "Bricolage Grotesque", sans-serif; font-size: 1.1rem;
+    margin: 0; font-weight: 700; letter-spacing: -.01em;
+  }
+  .screen .sub { font-size: .82rem; color: var(--ink-faint); text-align: center; }
+  .field {
+    width: 100%; background: var(--sunken); border: 1px solid var(--rule);
+    border-radius: 5px; padding: .5rem .65rem;
+    font-size: .82rem; color: var(--ink-faint);
+  }
+  .field.filled { color: var(--ink); }
+  .btn {
+    width: 100%; background: var(--ink); color: var(--ground);
+    border-radius: 5px; padding: .5rem; text-align: center;
+    font-size: .82rem; font-weight: 600;
+  }
+  .qr {
+    width: 132px; height: 132px; border-radius: 6px;
+    background:
+      linear-gradient(90deg, var(--ink) 12%, transparent 12% 88%, var(--ink) 88%) top/100% 22% no-repeat,
+      linear-gradient(90deg, var(--ink) 12%, transparent 12% 88%, var(--ink) 88%) bottom/100% 22% no-repeat,
+      var(--sunken);
+    display: grid; place-items: center;
+    font-family: "JetBrains Mono", monospace; font-size: .6rem; color: var(--ink-faint);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-family: "JetBrains Mono", monospace; font-size: .62rem;
+    text-transform: uppercase; letter-spacing: .1em;
+    padding: .25rem .55rem; border-radius: 99px;
+    background: var(--accent-soft); color: var(--accent-ink);
+  }
+  .dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--accent); }
+
+  /* phone frame for the WhatsApp side */
+  .phone {
+    width: 178px; border: 8px solid var(--ink); border-radius: 22px;
+    background: var(--raised); overflow: hidden; box-shadow: var(--shadow);
+  }
+  .phone-top { background: var(--accent); color: #fff; padding: .5rem .6rem; font-size: .72rem; font-weight: 600; }
+  .phone-body { padding: .55rem; display: flex; flex-direction: column; gap: .35rem; }
+  .row { font-size: .7rem; padding: .4rem .45rem; border-radius: 4px; background: var(--sunken); color: var(--ink-soft); }
+  .row.hi { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+
+  .side-by-side { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: flex-start; }
+
+  /* ---------- chat sample ---------- */
+
+  .chat { display: flex; flex-direction: column; gap: .45rem; max-width: 420px; }
+  .bub {
+    padding: .5rem .75rem; border-radius: 12px; font-size: .88rem; max-width: 78%;
+    line-height: 1.45;
+  }
+  .bub.them { background: var(--sunken); align-self: flex-start; border-bottom-left-radius: 3px; }
+  .bub.us { background: var(--accent-soft); color: var(--accent-ink); align-self: flex-end; border-bottom-right-radius: 3px; }
+  .bub .meta { display: block; font-size: .65rem; color: var(--ink-faint); margin-top: .2rem; }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap { overflow-x: auto; max-width: 100%; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 420px; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: "JetBrains Mono", monospace; font-size: .66rem; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); font-weight: 400; }
+  td code { font-size: .82rem; }
+
+  code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .85em; background: var(--sunken);
+    padding: .1rem .32rem; border-radius: 3px;
+  }
+
+  /* ---------- section rhythm ---------- */
+
+  section.block { margin-bottom: clamp(2.5rem, 6vw, 4rem); display: flex; flex-direction: column; gap: 1.1rem; }
+  section.block > h2 { font-size: clamp(1.5rem, 3.6vw, 2rem); }
+  hr.div { border: 0; border-top: 1px solid var(--rule); margin: clamp(2.5rem, 6vw, 4rem) 0; }
+
+  .checklist { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  .checklist li { display: flex; gap: .6rem; align-items: flex-start; }
+  .checklist .box {
+    width: 1.05rem; height: 1.05rem; border: 1.5px solid var(--rule);
+    border-radius: 3px; flex: none; margin-top: .3rem;
+  }
+
+  .faq { border-top: 1px solid var(--rule); padding-top: 1rem; }
+  .faq h3 { font-size: 1.02rem; margin-bottom: .3rem; }
+
+  footer.end {
+    border-top: 1px solid var(--rule); padding-top: 1.5rem;
+    color: var(--ink-faint); font-size: .85rem;
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <span class="eyebrow">Setup guide · about 20 minutes</span>
+    <h1>Your WhatsApp assistant, from nothing to answering customers</h1>
+    <p class="lede">
+      Seven steps. You will copy and paste two commands, scan one QR code, and write a few sentences about
+      your business. No coding, and nothing to install on your own computer.
+    </p>
+    <div class="badges">
+      <span class="badge">runs on your own server</span>
+      <span class="badge">your data stays with you</span>
+      <span class="badge">answers only people who message you</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ================= WHAT IT DOES ================= -->
+  <section class="block">
+    <h2>What you are setting up</h2>
+    <p>
+      A customer messages your WhatsApp number. The assistant reads it, answers in your words, and sounds
+      like a person on your team — short replies, all lower case, with a natural pause before answering.
+      If nobody follows up, it sends one or two gentle nudges and then stops.
+    </p>
+
+    <div class="chat" aria-label="Example conversation">
+      <div class="bub them">hi, are you open today?</div>
+      <div class="bub us">yep, till 5 today <span class="meta">seen · replied 14 seconds later</span></div>
+      <div class="bub them">do you deliver to clifton?</div>
+      <div class="bub us">we do, it's £5 anywhere in town</div>
+      <div class="bub them">perfect, i'll come by instead</div>
+      <div class="bub us">no problem, see you soon!</div>
+    </div>
+
+    <p>
+      The moment <strong>you</strong> reply to someone yourself from your phone, the assistant goes quiet in
+      that chat permanently. It will never talk over you.
+    </p>
+  </section>
+
+  <hr class="div">
+
+  <!-- ================= BEFORE YOU START ================= -->
+  <section class="block">
+    <h2>Before you start</h2>
+    <p>Four things. Gather them now and the rest takes twenty minutes.</p>
+
+    <ul class="checklist">
+      <li><span class="box"></span><span><strong>A spare phone number with WhatsApp on it.</strong> Not your personal number — see the warning at the bottom of this page.</span></li>
+      <li><span class="box"></span><span><strong>A server.</strong> Any small VPS from Hostinger, DigitalOcean, Hetzner or similar, running Ubuntu. The cheapest one is plenty.</span></li>
+      <li><span class="box"></span><span><strong>A web address</strong> you control, so you can use a subdomain like <code>chat.yourbusiness.com</code>.</span></li>
+      <li><span class="box"></span><span><strong>An OpenRouter account</strong> with a few pounds of credit, from <a href="https://openrouter.ai">openrouter.ai</a>. This is what powers the replies, and you pay them directly for what you use.</span></li>
+    </ul>
+  </section>
+
+  <hr class="div">
+
+  <!-- ================= STEP 1 ================= -->
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div>
+        <h2>Point your web address at the server</h2>
+        <div class="step-time">3 minutes, then a short wait</div>
+      </div>
+      <p>
+        Sign in wherever you bought your domain and find the <strong>DNS records</strong> screen. Add one
+        record:
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Type</th><th>Name</th><th>Points to</th></tr></thead>
+          <tbody>
+            <tr><td><code>A</code></td><td><code>chat</code></td><td>your server's IP address</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note warn">
+        <span class="label">The one thing people get wrong</span>
+        <p>
+          In the <strong>Name</strong> box type only <code>chat</code> — not <code>chat.yourbusiness.com</code>.
+          Your provider adds the rest. Typing the full address creates something that will never work.
+        </p>
+      </div>
+
+      <p>Save it, then wait two or three minutes before the next step.</p>
+    </div>
+  </div>
+
+  <!-- ================= STEP 2 ================= -->
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div>
+        <h2>Install it with one command</h2>
+        <div class="step-time">3 minutes</div>
+      </div>
+      <p>
+        Open your server's terminal. Every host has a button for this — Hostinger calls it
+        <strong>Browser terminal</strong>, others call it <strong>Console</strong>. Paste this line,
+        replacing the address with your own, and press Enter.
+      </p>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="term-title">your server</span>
+        </div>
+        <pre><span class="prompt">#</span> curl -fsSL https://raw.githubusercontent.com/meris01/what-sapp-agent/main/scripts/bootstrap.sh | bash -s <strong>chat.yourbusiness.com</strong></pre>
+      </div>
+
+      <p>It works on its own for a couple of minutes, then finishes like this:</p>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="term-title">finished</span>
+        </div>
+<pre><span class="dim">  node v22.14.0
+  service user created
+  dependencies installed
+  systemd service installed
+  caddy configured
+  waiting for the certificate...</span>
+
+  <span class="ok">Live at https://chat.yourbusiness.com</span>
+
+  Sign in with:
+
+      username   <strong>admin</strong>
+      password   <strong>K7mQp2xRvT9w</strong>
+</pre>
+      </div>
+
+      <div class="note">
+        <span class="label">Write these down</span>
+        <p>
+          That username and password are yours. They are also saved on the server in a file called
+          <code>.env</code> if you lose them.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STEP 3 ================= -->
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div>
+        <h2>Sign in</h2>
+        <div class="step-time">30 seconds</div>
+      </div>
+      <p>Open your address in any browser and enter what the installer printed.</p>
+
+      <div class="screen">
+        <div class="screen-chrome">
+          <span class="term-dot"></span>
+          <span class="screen-url">https://chat.yourbusiness.com/login</span>
+        </div>
+        <div class="screen-inner">
+          <h4>Sign in</h4>
+          <p class="sub">Enter the dashboard password for this server.</p>
+          <div class="field filled">admin</div>
+          <div class="field">Password</div>
+          <div class="btn">Sign in</div>
+        </div>
+      </div>
+
+      <p class="sub" style="max-width:var(--measure)">
+        Illustration of the real screen. Yours will look like this.
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= STEP 4 ================= -->
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <div>
+        <h2>Connect WhatsApp</h2>
+        <div class="step-time">2 minutes</div>
+      </div>
+      <p>
+        You land on a page showing a QR code. On the phone whose number you are using, open WhatsApp and go to
+        <strong>Linked Devices → Link a Device</strong>, then point the camera at your screen.
+      </p>
+
+      <div class="side-by-side">
+        <div class="screen" style="max-width:290px">
+          <div class="screen-chrome">
+            <span class="term-dot"></span>
+            <span class="screen-url">chat.yourbusiness.com</span>
+          </div>
+          <div class="screen-inner">
+            <span class="pill"><span class="dot"></span> waiting for scan</span>
+            <h4>Connect WhatsApp</h4>
+            <div class="qr">QR code</div>
+            <p class="sub">Scan with WhatsApp on your phone</p>
+          </div>
+        </div>
+
+        <div class="phone" aria-label="WhatsApp on a phone">
+          <div class="phone-top">WhatsApp · Settings</div>
+          <div class="phone-body">
+            <div class="row">Account</div>
+            <div class="row">Privacy</div>
+            <div class="row hi">Linked Devices →</div>
+            <div class="row">Chats</div>
+            <div class="row">Notifications</div>
+          </div>
+        </div>
+      </div>
+
+      <p>
+        The badge turns to <strong>Connected</strong> within a few seconds and the QR disappears. That is the
+        hard part done.
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= STEP 5 ================= -->
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <div>
+        <h2>Add your OpenRouter key</h2>
+        <div class="step-time">2 minutes</div>
+      </div>
+      <p>
+        This is what writes the replies. Go to <a href="https://openrouter.ai/keys">openrouter.ai/keys</a>,
+        create a key, and copy it. Then in the dashboard open <strong>Settings</strong>, paste it into
+        <strong>OpenRouter API key</strong>, and press Save.
+      </p>
+      <p>
+        A sensible model is already chosen (<code>openai/gpt-5.6-luna</code>). Leave it unless you have a reason to change it. Press <strong>Test connection</strong>
+        and wait for the green tick.
+      </p>
+
+      <div class="note">
+        <span class="label">What this costs</span>
+        <p>
+          You pay OpenRouter directly, per reply. For a small shop answering a few dozen messages a day this
+          is typically well under a pound a week. Top up your balance there, not here.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STEP 6 ================= -->
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <div>
+        <h2>Tell it about your business</h2>
+        <div class="step-time">10 minutes, and worth taking your time</div>
+      </div>
+      <p>
+        Open <strong>Instructions</strong>. This is the only part that is really yours to write, and it
+        decides how good the assistant is. There is a <strong>Insert a starting template</strong> button if
+        you want a skeleton to fill in.
+      </p>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="term-title">a good example</span>
+        </div>
+<pre>you are the assistant for Rossi's Pizzeria in Bristol.
+
+what we offer
+- pizzas from £9 to £14, see the menu at rossis.co.uk/menu
+- gluten free bases, £2 extra
+
+practical details
+- open tuesday to sunday, 5pm to 10pm. closed mondays.
+- 12 park street, bristol
+- delivery within 3 miles, £3, usually 40 minutes
+
+how to handle customers
+- answer questions about the list above. anything else,
+  say you will check with the team.
+- never promise a discount or a delivery time that is
+  not written here.
+- to take an order, collect the items, name and address,
+  then say someone will ring to confirm.
+- if someone is unhappy, apologise briefly and say a
+  colleague will reply here shortly.</pre>
+      </div>
+
+      <p>
+        Press <strong>Save</strong>, then <strong>Test instructions</strong> to see a sample reply without
+        anything being sent to WhatsApp.
+      </p>
+
+      <div class="note">
+        <span class="label">Already handled for you</span>
+        <p>
+          Short lower-case texting style, the natural pause before replying, matching the customer's
+          language, and refusing to invent prices. You only need the facts about your business.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STEP 7 ================= -->
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-body">
+      <div>
+        <h2>Send it a test message</h2>
+        <div class="step-time">1 minute</div>
+      </div>
+      <p>
+        From a <strong>different</strong> phone, message your business number and watch what happens.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>When</th><th>What you see</th></tr></thead>
+          <tbody>
+            <tr><td>Straight away</td><td>Two grey ticks. The message is not opened yet.</td></tr>
+            <tr><td>3–60 seconds</td><td>The number comes online, ticks turn blue.</td></tr>
+            <tr><td>A moment later</td><td>"typing…", then the reply arrives.</td></tr>
+            <tr><td>Half a minute after</td><td>The number quietly goes offline again.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note warn">
+        <span class="label">Use a different phone</span>
+        <p>
+          A message sent from the linked phone itself counts as <em>you</em> taking over, which switches the
+          assistant off for that chat permanently. That is deliberate — just not what you want mid-test.
+        </p>
+      </div>
+
+      <p>That is everything. It now runs on its own, including after a reboot.</p>
+    </div>
+  </div>
+
+  <hr class="div">
+
+  <!-- ================= LIVING WITH IT ================= -->
+  <section class="block">
+    <h2>Living with it</h2>
+
+    <div class="faq">
+      <h3>Taking over a conversation</h3>
+      <p>
+        Just reply from your phone as normal. The assistant stops in that chat immediately and for good —
+        even if it was halfway through writing something. Nothing to switch off.
+      </p>
+    </div>
+
+    <div class="faq">
+      <h3>Pausing everything</h3>
+      <p>
+        Settings → <strong>Automation</strong> → turn it off. Messages still arrive and are recorded, but
+        nothing is answered and nothing is marked as read.
+      </p>
+    </div>
+
+    <div class="faq">
+      <h3>When a customer says "stop"</h3>
+      <p>
+        Handled automatically. They get one short acknowledgement and are never messaged again. This is a
+        legal requirement in most places, so it cannot be turned off.
+      </p>
+    </div>
+
+    <div class="faq">
+      <h3>Follow-ups</h3>
+      <p>
+        If a customer goes quiet after the assistant replies, it nudges them twice — after three hours, then
+        the next day — and then stops. Held back overnight so nobody is messaged at 3am. Change the number
+        and the timing under Settings → Follow-ups.
+      </p>
+    </div>
+
+    <div class="faq">
+      <h3>Adding your staff</h3>
+      <p>
+        Team → <strong>Invite a member</strong> gives you a single-use link to send them. They pick their own
+        password. There is no open sign-up, on purpose: anyone with an account can read every customer
+        conversation.
+      </p>
+    </div>
+
+    <div class="faq">
+      <h3>It remembers your customers</h3>
+      <p>
+        Names, what they wanted, their address, what was agreed. Someone who messages again next month will
+        not be asked the same questions twice.
+      </p>
+    </div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ================= TROUBLESHOOTING ================= -->
+  <section class="block">
+    <h2>If something goes wrong</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>The page will not load at all</td>
+            <td>DNS has not caught up. Wait five minutes and try again. If it still fails, check the record's Name box says only <code>chat</code>.</td>
+          </tr>
+          <tr>
+            <td>"Incorrect username or password"</td>
+            <td>The username is <code>admin</code> — easy to mistype. The password is in <code>/opt/whatsapp-agent/.env</code> on your server.</td>
+          </tr>
+          <tr>
+            <td>The QR code will not scan</td>
+            <td>Press <strong>Refresh connection</strong> for a fresh one. They expire after about a minute.</td>
+          </tr>
+          <tr>
+            <td>It stopped replying to one person</td>
+            <td>Almost always because you replied to them yourself, or they said "stop". Both are permanent by design.</td>
+          </tr>
+          <tr>
+            <td>It stopped replying to everyone</td>
+            <td>Check Settings — usually automation was paused, or the OpenRouter balance ran out.</td>
+          </tr>
+          <tr>
+            <td>Says "Disconnected"</td>
+            <td>WhatsApp dropped the link. It reconnects on its own; if not, scan the QR again.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>To restart it, or to see what it has been doing:</p>
+
+    <div class="term">
+      <div class="term-bar">
+        <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+        <span class="term-title">your server</span>
+      </div>
+<pre><span class="prompt">#</span> systemctl restart whatsapp-agent
+<span class="prompt">#</span> journalctl -u whatsapp-agent -f</pre>
+    </div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ================= THE HONEST BIT ================= -->
+  <section class="block">
+    <h2>Read this before you use a number that matters</h2>
+
+    <div class="note stop">
+      <span class="label">Use a spare number</span>
+      <p>
+        This connects to WhatsApp in a way WhatsApp's terms do not permit. In practice, low-volume
+        inbound answering like this is rarely troubled — but the number <strong>can</strong> be restricted or
+        banned, without warning and with no reliable appeal, and no amount of settings changes that.
+      </p>
+      <p style="margin-top:.6rem">
+        Use a number your business could operate without. Not your personal number, and not the one printed
+        on your van.
+      </p>
+    </div>
+
+    <p>
+      Two other things worth knowing. Replies are written by an AI, so review conversations now and again —
+      you are responsible for what your business says. And customer conversations are stored on your server,
+      which makes you responsible for keeping it secure and for telling customers that enquiries are handled
+      with AI assistance.
+    </p>
+
+    <p>
+      If you would rather have none of that risk, there is an official paid WhatsApp Business API that this
+      can be moved onto. Ask whoever sold you this.
+    </p>
+  </section>
+
+  <footer class="end">
+    <p>
+      Every screen shown here is an illustration of the real interface. Your dashboard will look the same.
+    </p>
+  </footer>
+
+</div>

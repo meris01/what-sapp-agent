@@ -14,7 +14,7 @@ const KEYS = {
   optOutReply: 'opt_out_reply',
 };
 
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4';
+const DEFAULT_MODEL = 'openai/gpt-5.6-luna';
 
 // Several jurisdictions require people to be told they are talking to an
 // automated system. Kept as an explicit, visible setting rather than something
