@@ -15,7 +15,6 @@
   const testButton = document.querySelector('[data-action="test-model"]');
   const testIcon = document.querySelector('[data-bind="test-icon"]');
 
-  const disclosureForm = document.querySelector('[data-form="disclosure"]');
   const followupForm = document.querySelector('[data-form="followups"]');
   const pausedToggle = document.querySelector('[data-action="toggle-paused"]');
   const pausedLabel = document.querySelector('[data-bind="paused-label"]');
@@ -68,6 +67,7 @@
     'settings.instructions': 'Instructions updated',
     'settings.followups': 'Follow-up settings updated',
     'settings.paused': 'Automation switched',
+    'settings.inbound_paused': 'Inbound AI switched',
     'settings.disclosure': 'AI disclosure changed',
     'optout.received': 'A customer opted out',
     'settings.test': 'Connection tested',
@@ -79,12 +79,6 @@
     // Prefer the stored detail when it adds something beyond the generic label.
     if (event.message && event.message !== base) return event.message;
     return base;
-  }
-
-  function renderDisclosure(disclosure) {
-    if (document.activeElement && disclosureForm.contains(document.activeElement)) return;
-    disclosureForm.elements.enabled.checked = disclosure.enabled;
-    disclosureForm.elements.text.value = disclosure.text;
   }
 
   function renderEvents(events) {
@@ -122,7 +116,6 @@
     }
 
     renderFollowups(state.followups);
-    renderDisclosure(state.disclosure);
 
     if (document.activeElement !== pausedToggle) {
       pausedToggle.checked = state.automation.paused;
@@ -258,26 +251,6 @@
         });
         renderFollowups(data.followups);
         App.toast('Follow-up settings saved');
-      } catch (err) {
-        App.toast(err.message, 'error');
-      }
-    });
-  });
-
-  disclosureForm.addEventListener('submit', function (event) {
-    event.preventDefault();
-    const button = disclosureForm.querySelector('button[type="submit"]');
-    App.withBusy(button, async function () {
-      try {
-        const data = await App.api('/settings/disclosure', {
-          method: 'POST',
-          body: {
-            enabled: disclosureForm.elements.enabled.checked,
-            text: disclosureForm.elements.text.value,
-          },
-        });
-        renderDisclosure(data.disclosure);
-        App.toast(data.disclosure.enabled ? 'Disclosure saved' : 'Disclosure turned off');
       } catch (err) {
         App.toast(err.message, 'error');
       }

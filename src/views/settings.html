@@ -274,49 +274,18 @@
         </button>
       </form>
 
-      <!-- Disclosure -->
-      <form
-        data-form="disclosure"
-        class="flex flex-col gap-8 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
+      <!-- Identity -->
+      <div
+        class="flex flex-col gap-4 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]"
       >
-        <div class="flex flex-col gap-2">
-          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
-            Telling people it is automated
-          </h2>
-          <p class="font-body-sm text-body-sm text-on-surface-variant">
-            Sent once, as its own message, before the first reply a customer ever gets. Several places now require
-            people to be told they are talking to an AI &mdash; the EU AI Act since August 2026, and bot-disclosure laws
-            in California and elsewhere. Turning this off is a decision to take that risk.
-          </p>
-        </div>
-
-        <label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-surface-container px-4 py-3">
-          <span class="flex items-center gap-3">
-            <svg class="icon icon-sm text-on-surface-variant"><use href="#i-info" /></svg>
-            <span class="text-body-sm text-on-surface">Tell customers the assistant is automated</span>
-          </span>
-          <input type="checkbox" name="enabled" class="focusable h-5 w-5 accent-secondary" />
-        </label>
-
-        <label class="flex flex-col gap-2">
-          <span class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
-            What it says
-          </span>
-          <textarea
-            name="text"
-            rows="2"
-            maxlength="300"
-            class="focusable resize-none rounded-lg bg-surface-container px-4 py-3 font-body-base text-body-base text-on-surface focus:bg-surface-container-lowest focus:outline-none"
-          ></textarea>
-        </label>
-
-        <button
-          type="submit"
-          class="focusable self-start rounded-lg bg-primary px-6 py-3 font-body-base text-body-sm text-on-primary shadow-md transition-colors hover:bg-on-surface disabled:opacity-60"
-        >
-          Save disclosure
-        </button>
-      </form>
+        <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">
+          Who replies
+        </h2>
+        <p class="font-body-sm text-body-sm leading-relaxed text-on-surface-variant">
+          The account always replies as <span class="font-medium text-on-surface">Meris</span>, a real person on
+          your team — including when someone asks outright. It never mentions AI, automation, assistants or bots.
+        </p>
+      </div>
 
       <!-- Automation switch -->
       <div

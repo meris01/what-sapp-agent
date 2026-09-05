@@ -4,6 +4,8 @@ const Database = require('better-sqlite3');
 const { DB_FILE, ensureDirs } = require('./paths');
 const config = require('./config');
 const logger = require('./logger');
+// wame.js is dependency-free (pure parsing), so requiring it here cannot cycle.
+const { normalisePhone, jidForPhone } = require('./wame');
 
 ensureDirs();
 
@@ -51,6 +53,29 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_sent_messages_created ON sent_messages (created_at);
+
+  -- Outbound leads: people we may message first (wa.me imports, lead sheets).
+  -- Separate from conversations (which only exist after contact) so unsent,
+  -- opted-out and never-contacted numbers stay queryable across restarts.
+  CREATE TABLE IF NOT EXISTS leads (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone        TEXT NOT NULL UNIQUE,
+    jid          TEXT NOT NULL,
+    name         TEXT,
+    message      TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending','queued','scheduled','sent','failed','replied','opted_out','not_contacted')),
+    source       TEXT,
+    scheduled_at INTEGER,
+    sent_at      INTEGER,
+    replied_at   INTEGER,
+    fail_reason  TEXT,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_leads_status ON leads (status);
+  CREATE INDEX IF NOT EXISTS idx_leads_scheduled ON leads (scheduled_at);
 
   CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +140,18 @@ addColumnIfMissing('conversations', 'disclosed_at', 'INTEGER');
 // Who was signed in when something happened, so a shared install has a trail.
 addColumnIfMissing('events', 'actor', 'TEXT');
 addColumnIfMissing('sessions', 'user_id', 'INTEGER');
+
+// Defensive: a `leads` table created by an older build may miss columns added
+// later. Fresh installs already get the full schema from the CREATE TABLE above.
+addColumnIfMissing('leads', 'jid', 'TEXT');
+addColumnIfMissing('leads', 'name', 'TEXT');
+addColumnIfMissing('leads', 'message', "TEXT NOT NULL DEFAULT ''");
+addColumnIfMissing('leads', 'source', 'TEXT');
+addColumnIfMissing('leads', 'scheduled_at', 'INTEGER');
+addColumnIfMissing('leads', 'sent_at', 'INTEGER');
+addColumnIfMissing('leads', 'replied_at', 'INTEGER');
+addColumnIfMissing('leads', 'fail_reason', 'TEXT');
+addColumnIfMissing('leads', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
 
 const now = () => Date.now();
 
@@ -279,6 +316,299 @@ function markHumanTakeover(jid) {
 const isHumanHandled = (jid) => Boolean(stmtIsTakenOver.get(jid));
 const countHumanHandled = () => stmtCountTakenOver.get().count;
 
+/* ------------------------------ outbound leads ---------------------------- */
+
+/**
+ * Every status a lead can sit in. Terminal states (`sent`, `replied`,
+ * `failed`, `opted_out`, `not_contacted`) are never overwritten by a
+ * re-import; only `pending`/`queued`/`scheduled` rows accept new
+ * name/message/source details.
+ */
+const LEAD_STATUSES = Object.freeze([
+  'pending',
+  'queued',
+  'scheduled',
+  'sent',
+  'failed',
+  'replied',
+  'opted_out',
+  'not_contacted',
+]);
+
+const stmtGetLeadByPhone = db.prepare('SELECT * FROM leads WHERE phone = ?');
+const stmtUpsertLead = db.prepare(`
+  INSERT INTO leads (phone, jid, name, message, source, created_at, updated_at)
+  VALUES (@phone, @jid, @name, @message, @source, @ts, @ts)
+  ON CONFLICT (phone) DO UPDATE SET
+    name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != ''
+                THEN excluded.name ELSE leads.name END,
+    message = CASE WHEN excluded.message IS NOT NULL AND excluded.message != ''
+                THEN excluded.message ELSE leads.message END,
+    source = COALESCE(excluded.source, leads.source),
+    updated_at = excluded.updated_at
+`);
+const stmtPendingLeads = db.prepare(`
+  SELECT * FROM leads
+   WHERE status = 'pending'
+      OR (status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= @ts)
+   ORDER BY COALESCE(scheduled_at, created_at), id
+   LIMIT @limit
+`);
+const stmtLeadStatusCounts = db.prepare(
+  'SELECT status, COUNT(*) AS count FROM leads GROUP BY status'
+);
+const stmtTodaySentCount = db.prepare(
+  "SELECT COUNT(*) AS count FROM leads WHERE status = 'sent' AND sent_at >= ?"
+);
+// State transitions below deliberately refuse to overwrite ground truth:
+// a reply or an opt-out is never undone by the sender pipeline.
+const stmtMarkScheduled = db.prepare(`
+  UPDATE leads SET status = 'scheduled', scheduled_at = @at, fail_reason = NULL, updated_at = @ts
+   WHERE (id = @key OR phone = @key) AND status NOT IN ('sent', 'replied', 'opted_out')
+`);
+const stmtMarkSent = db.prepare(`
+  UPDATE leads SET status = 'sent', sent_at = @ts, attempts = attempts + 1, updated_at = @ts
+   WHERE (id = @key OR phone = @key) AND status NOT IN ('sent', 'replied', 'opted_out')
+`);
+const stmtMarkFailed = db.prepare(`
+  UPDATE leads SET status = 'failed', fail_reason = @reason, attempts = attempts + 1, updated_at = @ts
+   WHERE (id = @key OR phone = @key) AND status NOT IN ('replied', 'opted_out')
+`);
+const stmtMarkReplied = db.prepare(`
+  UPDATE leads SET status = 'replied', replied_at = COALESCE(replied_at, @ts), updated_at = @ts
+   WHERE (id = @key OR phone = @key) AND status != 'replied'
+`);
+const stmtMarkLeadOptedOut = db.prepare(`
+  UPDATE leads SET status = 'opted_out', fail_reason = @reason, updated_at = @ts
+   WHERE (id = @key OR phone = @key) AND status != 'opted_out'
+`);
+const stmtMarkLeadNotContacted = db.prepare(`
+  UPDATE leads SET status = 'not_contacted', fail_reason = @reason, updated_at = @ts
+   WHERE (id = @key OR phone = @key) AND status NOT IN ('sent', 'replied', 'opted_out', 'not_contacted')
+`);
+
+/**
+ * Insert a lead or refresh the details of an existing one.
+ *
+ * Dedupe-safe: a second import of the same phone only fills in a missing
+ * name/message/source and bumps `updated_at`. Status, attempts and all
+ * timestamps are preserved, so re-imports can never resurrect an
+ * `opted_out`/`sent`/`replied` lead.
+ *
+ * @param {{ phone: string, name?: string|null, message?: string|null, source?: string|null }} lead
+ * @returns {object|null} The lead row after the write, or `null` when the
+ *   phone number is invalid.
+ */
+function upsertLead({ phone, name = null, message = null, source = null }) {
+  const digits = normalisePhone(phone);
+  if (!digits) return null;
+  const clean = (v) => (v === null || v === undefined ? null : String(v).trim() || null);
+  stmtUpsertLead.run({
+    phone: digits,
+    jid: jidForPhone(digits),
+    name: clean(name),
+    message: clean(message) || '',
+    source: clean(source),
+    ts: now(),
+  });
+  return stmtGetLeadByPhone.get(digits);
+}
+
+/**
+ * Fetch one lead by phone (any format accepted, normalised first).
+ *
+ * @param {string} phone - Raw phone value.
+ * @returns {object|undefined} The lead row, or `undefined` when unknown.
+ */
+function getLeadByPhone(phone) {
+  const digits = normalisePhone(phone);
+  return digits ? stmtGetLeadByPhone.get(digits) : undefined;
+}
+
+/**
+ * Leads ready to send: `pending` rows plus `scheduled` rows whose time has
+ * come, oldest first.
+ *
+ * @param {number} [limit=50] - Max rows to return.
+ * @returns {object[]} Lead rows in send order.
+ */
+function getPendingLeads(limit = 50) {
+  const n = Math.max(1, Math.min(500, Math.round(Number(limit)) || 50));
+  return stmtPendingLeads.all({ ts: now(), limit: n });
+}
+
+/**
+ * Count leads per status. Every known status is always present (zero-filled).
+ *
+ * @returns {{ pending: number, queued: number, scheduled: number, sent: number, failed: number, replied: number, opted_out: number, not_contacted: number }}
+ */
+function getStatusCounts() {
+  const counts = Object.fromEntries(LEAD_STATUSES.map((s) => [s, 0]));
+  for (const row of stmtLeadStatusCounts.all()) {
+    if (row.status in counts) counts[row.status] = row.count;
+  }
+  return counts;
+}
+
+/**
+ * How many leads were sent since local midnight. Feeds the outbound daily cap.
+ *
+ * @param {number} [ref=Date.now()] - Reference timestamp for "today".
+ * @returns {number} Count of leads with `sent_at` after local midnight.
+ */
+function getTodaySentCount(ref = Date.now()) {
+  const start = new Date(ref);
+  start.setHours(0, 0, 0, 0);
+  return stmtTodaySentCount.get(start.getTime()).count;
+}
+
+/** Accepts either the numeric lead `id` or the phone string. */
+const leadKey = (phoneOrId) => phoneOrId;
+
+/**
+ * Schedule a lead for a future timestamp.
+ *
+ * @param {number|string} phoneOrId - Lead id or phone.
+ * @param {number} at - Epoch-ms send time.
+ * @returns {boolean} True when a row actually changed state.
+ */
+function markScheduled(phoneOrId, at) {
+  return stmtMarkScheduled.run({ key: leadKey(phoneOrId), at, ts: now() }).changes > 0;
+}
+
+/**
+ * Record a successful send (bumps `attempts`, stamps `sent_at`).
+ *
+ * @param {number|string} phoneOrId - Lead id or phone.
+ * @returns {boolean} True when a row actually changed state.
+ */
+function markSent(phoneOrId) {
+  return stmtMarkSent.run({ key: leadKey(phoneOrId), ts: now() }).changes > 0;
+}
+
+/**
+ * Record a failed send (bumps `attempts`, keeps the reason for the UI).
+ *
+ * @param {number|string} phoneOrId - Lead id or phone.
+ * @param {string|null} [reason=null] - Short machine-readable failure reason.
+ * @returns {boolean} True when a row actually changed state.
+ */
+function markFailed(phoneOrId, reason = null) {
+  const clean = reason === null || reason === undefined ? null : String(reason).slice(0, 200);
+  return stmtMarkFailed.run({ key: leadKey(phoneOrId), reason: clean, ts: now() }).changes > 0;
+}
+
+/**
+ * Record that the lead replied (ground truth from inbound traffic; the
+ * future agent/scheduler loop calls this so the lead stops being "sent").
+ *
+ * @param {number|string} phoneOrId - Lead id or phone.
+ * @returns {boolean} True when a row actually changed state.
+ */
+function markReplied(phoneOrId) {
+  return stmtMarkReplied.run({ key: leadKey(phoneOrId), ts: now() }).changes > 0;
+}
+
+/**
+ * Mark a lead as opted out. Standing instruction: nothing in the app sends
+ * to it again, and re-imports preserve the state.
+ *
+ * @param {number|string} phoneOrId - Lead id or phone.
+ * @param {string|null} [reason=null] - Why (e.g. `"opted_out"`, `"import"`).
+ * @returns {boolean} True when a row actually changed state.
+ */
+function markLeadOptedOut(phoneOrId, reason = null) {
+  const clean = reason === null || reason === undefined ? null : String(reason).slice(0, 200);
+  return stmtMarkLeadOptedOut.run({ key: leadKey(phoneOrId), reason: clean, ts: now() }).changes > 0;
+}
+
+/**
+ * Mark a lead as must-not-contact (e.g. a human took over the chat). Like
+ * opt-out it is never resurrected by re-imports, but keeps its own status so
+ * the UI can tell "asked to stop" apart from "handled by a person".
+ *
+ * @param {number|string} phoneOrId - Lead id or phone.
+ * @param {string|null} [reason=null] - Why (e.g. `"human_takeover"`).
+ * @returns {boolean} True when a row actually changed state.
+ */
+function markLeadNotContacted(phoneOrId, reason = null) {
+  const clean = reason === null || reason === undefined ? null : String(reason).slice(0, 200);
+  return stmtMarkLeadNotContacted.run({ key: leadKey(phoneOrId), reason: clean, ts: now() }).changes > 0;
+}
+
+/**
+ * Bulk-import normalised leads with dedupe and suppression-list respect.
+ *
+ * For every entry: invalid phones are counted and skipped; numbers already
+ * opted out (a `conversations.opted_out_at` row for the JID) are stored as
+ * `opted_out` and never sent; numbers under human takeover become
+ * `not_contacted`; phones already in the pipeline or seen earlier in the
+ * same batch count as duplicates.
+ *
+ * @param {Array<{ phone: string, name?: string|null, message?: string|null, source?: string|null }>} list
+ * @returns {{ total: number, imported: number, duplicates: number, invalid: number, skippedOptOut: number, skippedHandover: number }}
+ */
+function importLeads(list) {
+  const stats = {
+    total: Array.isArray(list) ? list.length : 0,
+    imported: 0,
+    duplicates: 0,
+    invalid: 0,
+    skippedOptOut: 0,
+    skippedHandover: 0,
+  };
+  if (!Array.isArray(list)) return stats;
+  const seen = new Set();
+  for (const entry of list) {
+    const digits = normalisePhone(entry && entry.phone);
+    if (!digits) {
+      stats.invalid += 1;
+      continue;
+    }
+    if (seen.has(digits)) {
+      stats.duplicates += 1;
+      continue;
+    }
+    seen.add(digits);
+
+    const jid = jidForPhone(digits);
+    const conversation = jid ? stmtGetConversation.get(jid) : undefined;
+    const existing = stmtGetLeadByPhone.get(digits);
+
+    if ((conversation && conversation.opted_out_at) || (existing && existing.status === 'opted_out')) {
+      upsertLead(entry);
+      markLeadOptedOut(digits, 'opted_out');
+      stats.skippedOptOut += 1;
+      continue;
+    }
+    if (conversation && conversation.human_takeover_at) {
+      upsertLead(entry);
+      markLeadNotContacted(digits, 'human_takeover');
+      stats.skippedHandover += 1;
+      continue;
+    }
+    if (existing && existing.status !== 'pending' && existing.status !== 'failed') {
+      stats.duplicates += 1;
+      continue;
+    }
+    if (existing && existing.status === 'pending') {
+      upsertLead(entry);
+      stats.duplicates += 1;
+      continue;
+    }
+    upsertLead(entry);
+    // A re-imported `failed` lead becomes sendable again with fresh details.
+    const row = stmtGetLeadByPhone.get(digits);
+    if (row && row.status === 'failed') {
+      db.prepare(
+        "UPDATE leads SET status = 'pending', fail_reason = NULL, updated_at = ? WHERE phone = ?"
+      ).run(now(), digits);
+    }
+    stats.imported += 1;
+  }
+  return stats;
+}
+
 /* ----------------------------- sent messages ------------------------------ */
 
 const stmtRecordSent = db.prepare(
@@ -431,6 +761,19 @@ module.exports = {
   markHumanTakeover,
   isHumanHandled,
   countHumanHandled,
+  LEAD_STATUSES,
+  upsertLead,
+  getLeadByPhone,
+  getPendingLeads,
+  getStatusCounts,
+  getTodaySentCount,
+  markScheduled,
+  markSent,
+  markFailed,
+  markReplied,
+  markLeadOptedOut,
+  markLeadNotContacted,
+  importLeads,
   recordSentMessage,
   wasSentByUs,
   addMessage,

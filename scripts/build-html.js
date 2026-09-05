@@ -14,6 +14,7 @@ const OUT = path.join(ROOT, 'public');
 
 const PAGES = [
   { view: 'connect.html', out: 'connect.html', title: 'Connect WhatsApp · WhatsApp Agent', nav: 'connect', script: 'connect.js' },
+  { view: 'outbound.html', out: 'outbound.html', title: 'Outbound · WhatsApp Agent', nav: 'outbound', script: 'outbound.js' },
   { view: 'settings.html', out: 'settings.html', title: 'AI Configuration · WhatsApp Agent', nav: 'settings', script: 'settings.js' },
   { view: 'team.html', out: 'team.html', title: 'Team · WhatsApp Agent', nav: 'team', script: 'team.js' },
   {

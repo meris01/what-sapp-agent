@@ -44,9 +44,11 @@ module.exports = {
     return int(process.env.MESSAGE_RETENTION_DAYS, 30, { min: 1, max: 3650 });
   },
   get inboundDebounceMs() {
-    // Short: it only exists to catch a burst of messages typed in one breath.
-    // The human-feeling wait comes from the reply delay below.
-    return int(process.env.INBOUND_DEBOUNCE_MS, 3000, { min: 0, max: 60000 });
+    // Long enough to catch a second question typed right after the first, so
+    // one combined reply goes out instead of two. A newer message restarts
+    // the window, and a reply already being written is abandoned in favour
+    // of the newest cycle.
+    return int(process.env.INBOUND_DEBOUNCE_MS, 8000, { min: 0, max: 60000 });
   },
   // How long a customer waits for a reply, picked fresh each time.
   get replyDelayMinMs() {

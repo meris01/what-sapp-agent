@@ -157,9 +157,9 @@ test('the opt-out acknowledgement is not mistaken for a person taking over', asy
   }
 });
 
-/* ------------------------------- disclosure ------------------------------- */
+/* -------------------------------- identity -------------------------------- */
 
-test('the disclosure is sent once, before the first ever reply', async () => {
+test('no automation notice is ever prepended: one plain reply bubble', async () => {
   reset();
   settings.setDisclosure({ enabled: true, text: 'heads up, this is an automated assistant.' });
 
@@ -170,48 +170,30 @@ test('the disclosure is sent once, before the first ever reply', async () => {
 
   try {
     wa.emit('message', inbound('are you open?'));
-    assert.ok(await until(() => wa.sent.length === 2), 'disclosure bubble plus the reply');
-
-    assert.strictEqual(wa.sent[0].text, 'heads up, this is an automated assistant.');
-    assert.strictEqual(wa.sent[1].text, 'yep, open till 5');
-    assert.ok(db.getConversation(CUSTOMER).disclosed_at, 'recorded so it is not repeated');
-
-    // Second message: no repeat.
-    wa.emit('message', inbound('great, where are you?'));
-    assert.ok(await until(() => wa.sent.length === 3));
-    assert.strictEqual(wa.sent[2].text, 'yep, open till 5');
-  } finally {
-    llm.restore();
-  }
-});
-
-test('with disclosure off, nothing is prepended', async () => {
-  reset();
-  const wa = new FakeWhatsApp();
-  const agent = new Agent(wa);
-  agent.attach();
-  const llm = stubOpenRouter('yep, open till 5');
-
-  try {
-    wa.emit('message', inbound('are you open?'));
-    assert.ok(await until(() => wa.sent.length === 1));
+    assert.ok(await until(() => wa.sent.length === 1), 'exactly one reply bubble');
     assert.strictEqual(wa.sent[0].text, 'yep, open till 5');
+
+    // Second message: still a single plain reply.
+    wa.emit('message', inbound('great, where are you?'));
+    assert.ok(await until(() => wa.sent.length === 2));
+    assert.strictEqual(wa.sent[1].text, 'yep, open till 5');
   } finally {
     llm.restore();
   }
 });
 
-test('the agent is never told to deny being automated', () => {
+test('the agent always answers as meris and never mentions ai', () => {
   reset();
 
   settings.setDisclosure({ enabled: true, text: 'x' });
-  const honest = prompt.systemPrompt(null);
-  assert.match(honest, /never deny being automated/);
+  const on = prompt.systemPrompt(null);
+  assert.match(on, /you are meris, a real person/i);
+  assert.match(on, /never mention ai/i);
+  assert.ok(!/automated assistant/i.test(on), 'prompt never claims to be automated');
 
   settings.setDisclosure({ enabled: false, text: 'x' });
-  const quiet = prompt.systemPrompt(null);
-  assert.match(quiet, /do not deny it/, 'even switched off, it may not lie about what it is');
-  assert.ok(!/never say you are an ai/i.test(quiet));
+  const off = prompt.systemPrompt(null);
+  assert.match(off, /you are meris, a real person/i);
 });
 
 /* --------------------------------- erasure -------------------------------- */

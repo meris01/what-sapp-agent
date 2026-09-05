@@ -1,0 +1,145 @@
+<div class="flex w-full flex-col gap-10 px-margin-mobile py-margin-desktop lg:px-margin-desktop">
+  <div class="flex max-w-3xl flex-col gap-4">
+    <div class="flex items-center gap-3">
+      <span class="h-2 w-2 rounded-full bg-secondary"></span>
+      <span class="font-label-caps text-label-caps uppercase tracking-widest text-secondary">Outreach</span>
+    </div>
+    <h1 class="font-display-lg text-display-lg tracking-tight text-on-surface max-md:text-headline-lg">
+      Outbound
+    </h1>
+    <p class="max-w-xl font-title-md text-title-md text-on-surface-variant">
+      Reach new leads like a person would — one at a time, at random moments through the working day.
+    </p>
+    <div class="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-50 p-4 font-body-sm text-body-sm text-amber-900">
+      <svg class="icon icon-sm mt-0.5 shrink-0"><use href="#i-alert" /></svg>
+      <span>Cold messages go out over an unofficial connection that breaks WhatsApp's rules, so the number can be banned without warning. Never use your main number. Start small (10/day, rising slowly), and stop if anyone reports, blocks, or replies STOP.</span>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div class="flex items-start gap-4 rounded-xl bg-surface-container-lowest p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-body-sm font-medium text-on-primary">1</span>
+      <div>
+        <p class="font-body-sm font-medium text-on-surface">Add leads</p>
+        <p class="font-body-sm text-body-sm text-on-surface-variant">Paste wa.me links, numbers, or CSV rows below.</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-4 rounded-xl bg-surface-container-lowest p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-body-sm font-medium text-on-primary">2</span>
+      <div>
+        <p class="font-body-sm font-medium text-on-surface">Set the pace, press Start</p>
+        <p class="font-body-sm text-body-sm text-on-surface-variant">First message lands within ~2 minutes, the rest scatter randomly.</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-4 rounded-xl bg-surface-container-lowest p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-body-sm font-medium text-on-primary">3</span>
+      <div>
+        <p class="font-body-sm font-medium text-on-surface">Track every reply</p>
+        <p class="font-body-sm text-body-sm text-on-surface-variant">Anyone who answers is picked up by the assistant automatically.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 items-start gap-gutter">
+    <div class="col-span-12 flex flex-col gap-8 lg:col-span-7">
+      <!-- Import -->
+      <form data-form="import" class="flex flex-col gap-5 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+        <div class="flex items-center justify-between">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Add leads</h2>
+          <svg class="icon icon-sm text-on-surface-variant/60"><use href="#i-chat" /></svg>
+        </div>
+        <label class="flex flex-col gap-2 font-body-sm text-body-sm text-on-surface-variant">
+          wa.me links, numbers, or CSV — one per line
+          <textarea name="rawText" rows="5" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-3 font-body-sm text-body-sm text-on-surface" placeholder="https://wa.me/917506894939?text=Hey%2C%20is%20this%20Oils%20n%20Petals%3F&#10;917400007781, Priya, Hey Priya, quick question about your shop"></textarea>
+        </label>
+        <label class="flex flex-col gap-2 font-body-sm text-body-sm text-on-surface-variant">
+          Default message <span class="text-on-surface-variant/70">(used when a line carries no text)</span>
+          <input name="defaultMessage" maxlength="1000" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-3 font-body-sm text-body-sm text-on-surface" placeholder="Hey, is this …? Came across your business in Mumbai. Do you have a website?" />
+        </label>
+        <button type="submit" class="focusable self-start rounded-full bg-primary px-8 py-2.5 font-body-sm text-body-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-60">Import leads</button>
+      </form>
+
+      <!-- Leads -->
+      <div class="flex flex-col gap-4 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Leads</h2>
+            <span data-bind="lead-count" class="rounded-full bg-surface-container px-2.5 py-0.5 font-body-sm text-body-sm text-on-surface-variant"></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input data-bind="search" placeholder="Search phone or message…" class="focusable w-48 rounded-lg border border-outline-variant/40 bg-surface p-2 font-body-sm text-body-sm text-on-surface" />
+            <select data-bind="status-filter" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2 font-body-sm text-body-sm text-on-surface">
+              <option value="all">All</option>
+              <option value="pending">Not contacted</option>
+              <option value="sent">Sent</option>
+              <option value="needsFollowup">Not followed up</option>
+              <option value="replied">Replied</option>
+              <option value="failed">Failed</option>
+              <option value="opted_out">Opted out</option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[640px] font-body-sm text-body-sm">
+            <thead>
+              <tr class="text-left text-on-surface-variant">
+                <th class="py-2 pr-3 font-medium">Phone</th>
+                <th class="py-2 pr-3 font-medium">Reach-out message</th>
+                <th class="py-2 pr-3 font-medium">Status</th>
+                <th class="py-2 pr-3 font-medium">Scheduled</th>
+                <th class="py-2 pr-3 font-medium">Sent</th>
+                <th class="py-2 pr-3 font-medium">Reply</th>
+                <th class="py-2"></th>
+              </tr>
+            </thead>
+            <tbody data-bind="lead-rows">
+              <tr><td colspan="7" class="py-6 text-center text-on-surface-variant">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="font-body-sm text-body-sm text-on-surface-variant/80">Tap a message to expand it. Scheduled shows when a queued message goes out next.</p>
+      </div>
+    </div>
+
+    <div class="col-span-12 flex flex-col gap-8 lg:col-span-5 lg:sticky lg:top-24">
+      <!-- Today -->
+      <div class="flex flex-col gap-5 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+        <div class="flex items-center justify-between">
+          <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Today</h2>
+          <span data-bind="run-state" class="rounded-full bg-surface-container px-3 py-1 font-body-sm text-body-sm text-on-surface-variant">Paused</span>
+        </div>
+        <div>
+          <div class="mb-2 flex items-center justify-between font-body-sm text-body-sm">
+            <span class="text-on-surface-variant">Daily progress</span>
+            <span class="font-medium text-on-surface" data-bind="daily-text">0/60 sent</span>
+          </div>
+          <div class="h-2.5 overflow-hidden rounded-full bg-surface-container"><div data-bind="daily-bar" class="h-2.5 rounded-full bg-primary transition-all" style="width:0%"></div></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-amber-500"></span><span class="font-body-sm text-body-sm">Waiting</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-pending">0</div></div>
+          <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-sky-500"></span><span class="font-body-sm text-body-sm">Sent</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-sent">0</div></div>
+          <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-emerald-500"></span><span class="font-body-sm text-body-sm">Replied</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-replied">0</div></div>
+          <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-orange-500"></span><span class="font-body-sm text-body-sm">Needs nudge</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-followup">0</div></div>
+          <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-red-500"></span><span class="font-body-sm text-body-sm">Failed</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-failed">0</div></div>
+          <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-zinc-400"></span><span class="font-body-sm text-body-sm">Opted out</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-optedout">0</div></div>
+        </div>
+        <button type="button" data-action="start-pause" class="focusable rounded-full bg-primary px-6 py-3 font-body-sm text-body-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-60">Start sending</button>
+      </div>
+
+      <!-- Pacing -->
+      <form data-form="config" class="flex flex-col gap-5 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+        <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Pace — human and random</h2>
+        <div class="grid grid-cols-2 gap-4 font-body-sm text-body-sm text-on-surface-variant">
+          <label class="flex flex-col gap-1.5">Daily goal, max 60<input name="dailyCap" type="number" min="1" max="60" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Max per hour<input name="maxPerHour" type="number" min="1" max="30" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Day starts<input name="startHour" type="number" min="0" max="23" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Day ends<input name="endHour" type="number" min="0" max="23" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Shortest gap, minutes<input name="minGapMinutes" type="number" min="0" max="120" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+        </div>
+        <p class="font-body-sm text-body-sm leading-relaxed text-on-surface-variant">The first message lands within ~2 minutes. After that every gap is fully random — a minute, five minutes, twenty — auto-spread so the whole goal lands inside your hours. Never a fixed rhythm.</p>
+        <button type="submit" class="focusable self-start rounded-full bg-surface-container px-6 py-2.5 font-body-sm text-body-sm font-medium text-on-surface transition-colors hover:bg-surface-container-low disabled:opacity-60">Save pace</button>
+      </form>
+    </div>
+  </div>
+</div>

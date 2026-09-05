@@ -155,6 +155,10 @@ function setOptOutReply(text) {
 const isPaused = () => db.getSetting(KEYS.paused, '0') === '1';
 const setPaused = (paused) => db.setSetting(KEYS.paused, paused ? '1' : '0');
 
+/** Inbound-only switch: when on, the AI never answers incoming chats, but outbound keeps sending. */
+const isInboundPaused = () => db.getSetting('automation_inbound_paused', '0') === '1';
+const setInboundPaused = (paused) => db.setSetting('automation_inbound_paused', paused ? '1' : '0');
+
 /** True when everything the agent needs to answer a customer is present. */
 function isConfigured() {
   return Boolean(getApiKey() && getModel() && getInstructions().trim());
@@ -183,5 +187,7 @@ module.exports = {
   normaliseFollowups,
   isPaused,
   setPaused,
+  isInboundPaused,
+  setInboundPaused,
   isConfigured,
 };

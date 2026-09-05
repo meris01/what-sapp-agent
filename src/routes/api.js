@@ -38,6 +38,7 @@ const llmLimiter = rateLimiter({ windowMs: 60 * 1000, max: 10 });
 // Invite codes are long and random; this simply removes any hope of guessing.
 const signupLimiter = rateLimiter({ windowMs: 60 * 1000, max: 10 });
 const waLimiter = rateLimiter({ windowMs: 60 * 1000, max: 12 });
+const outboundLimiter = rateLimiter({ windowMs: 60 * 1000, max: 20 });
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -55,6 +56,7 @@ function buildState(wa) {
     },
     automation: {
       paused: settings.isPaused(),
+      inboundPaused: settings.isInboundPaused(),
       configured: settings.isConfigured(),
       handedOver: db.countHumanHandled(),
       optedOut: db.countOptedOut(),
@@ -321,6 +323,18 @@ function createApiRouter({ wa, agent }) {
     res.json({ ok: true, paused });
   });
 
+  router.post('/settings/inbound-paused', (req, res) => {
+    const paused = Boolean(req.body?.paused);
+    settings.setInboundPaused(paused);
+    db.addEvent(
+      'info',
+      'settings.inbound_paused',
+      paused ? 'Inbound AI replies turned off' : 'Inbound AI replies turned on',
+      req.session.username
+    );
+    res.json({ ok: true, inboundPaused: paused });
+  });
+
   /* ---------------------------- instructions --------------------------- */
 
   router.post('/instructions', (req, res) => {
@@ -370,6 +384,172 @@ function createApiRouter({ wa, agent }) {
       }
     })
   );
+
+  /* ------------------------------ outbound ----------------------------- */
+
+  router.post('/outbound/import', outboundLimiter, (req, res) => {
+    let outbound;
+    try {
+      outbound = require('../lib/outbound');
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: 'Outbound module unavailable.' });
+    }
+    const rawText =
+      typeof req.body?.rawText === 'string'
+        ? req.body.rawText
+        : Array.isArray(req.body?.links)
+          ? req.body.links.join('\n')
+          : '';
+    const defaultMessage =
+      typeof req.body?.defaultMessage === 'string' ? req.body.defaultMessage.slice(0, 2000) : '';
+    if (!rawText.trim()) {
+      return res.status(400).json({ ok: false, error: 'Paste wa.me links, numbers, or CSV rows first.' });
+    }
+    if (rawText.length > 50 * 1024) {
+      return res.status(400).json({ ok: false, error: 'Import is limited to 50KB at a time.' });
+    }
+    let parsed;
+    try {
+      parsed = outbound.parseLeadsInput(rawText, { defaultMessage, source: 'dashboard' });
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: 'Could not parse that input.' });
+    }
+    // Leads without any message and no default are not sendable.
+    const sendable = parsed.leads.filter((l) => String(l.message || '').trim());
+    const missingMessage = parsed.leads.length - sendable.length;
+    const result = db.importLeads(sendable);
+    db.addEvent(
+      'info',
+      'outbound.import',
+      `Imported ${result.imported}, skipped ${missingMessage + parsed.stats.invalid} without message`,
+      req.session.username
+    );
+    res.json({
+      ok: true,
+      imported: result.imported,
+      skipped: parsed.stats.invalid + missingMessage,
+      duplicates: result.duplicates + parsed.stats.duplicates,
+      skippedOptOut: result.skippedOptOut,
+      skippedHandover: result.skippedHandover,
+      errors: parsed.errors.slice(0, 5),
+    });
+  });
+
+  router.get('/outbound/stats', (req, res) => {
+    let cfg = { enabled: false, dailyCap: 60, startHour: 9, endHour: 21, minGapMinutes: 5, maxPerHour: 8 };
+    try {
+      cfg = require('../lib/outbound').getOutboundConfig();
+    } catch {
+      // defaults stand
+    }
+    const counts = typeof db.getStatusCounts === 'function' ? db.getStatusCounts() : {};
+    const todaySent = typeof db.getTodaySentCount === 'function' ? db.getTodaySentCount() : 0;
+    res.json({
+      ok: true,
+      stats: {
+        byStatus: counts,
+        // User words: not contacted = pending+queued+scheduled, sent, replied = ok, failed, opted out
+        notContacted: (counts.pending || 0) + (counts.queued || 0) + (counts.scheduled || 0),
+        sent: counts.sent || 0,
+        replied: counts.replied || 0,
+        failed: counts.failed || 0,
+        optedOut: counts.opted_out || 0,
+        notContactedDetail: counts.not_contacted || 0,
+        todaySent,
+        dailyCap: cfg.dailyCap,
+        enabled: cfg.enabled,
+        config: cfg,
+      },
+    });
+  });
+
+  router.get('/outbound/leads', (req, res) => {
+    const status = String(req.query?.status || 'all');
+    const allowed = new Set(['all', 'pending', 'queued', 'scheduled', 'sent', 'failed', 'replied', 'opted_out', 'not_contacted', 'needsFollowup']);
+    if (!allowed.has(status)) return res.status(400).json({ ok: false, error: 'Unknown status filter.' });
+    const limit = Math.max(1, Math.min(200, Math.round(Number(req.query?.limit)) || 50));
+    let rows;
+    try {
+      if (status === 'all') {
+        rows = db.db.prepare('SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason FROM leads ORDER BY id DESC LIMIT ?').all(limit);
+      } else if (status === 'needsFollowup') {
+        const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+        rows = db.db.prepare("SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason FROM leads WHERE status = 'sent' AND sent_at IS NOT NULL AND sent_at < ? ORDER BY sent_at LIMIT ?").all(cutoff, limit);
+      } else {
+        rows = db.db.prepare('SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason FROM leads WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit);
+      }
+    } catch {
+      rows = [];
+    }
+    res.json({ ok: true, leads: rows });
+  });
+
+  router.post('/outbound/config', outboundLimiter, (req, res) => {
+    let outbound;
+    try {
+      outbound = require('../lib/outbound');
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Outbound module unavailable.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    if (body.dailyCap !== undefined && (Math.round(Number(body.dailyCap)) < 1 || Math.round(Number(body.dailyCap)) > 60)) {
+      return res.status(400).json({ ok: false, error: 'Daily cap is at most 60.' });
+    }
+    if (body.startHour !== undefined && body.endHour !== undefined && Number(body.startHour) >= Number(body.endHour)) {
+      return res.status(400).json({ ok: false, error: 'Start hour must be before end hour.' });
+    }
+    const saved = outbound.setOutboundConfig({
+      ...(body.enabled !== undefined ? { enabled: Boolean(body.enabled) } : {}),
+      ...(body.dailyCap !== undefined ? { dailyCap: Math.round(Number(body.dailyCap)) } : {}),
+      ...(body.startHour !== undefined ? { startHour: Math.round(Number(body.startHour)) } : {}),
+      ...(body.endHour !== undefined ? { endHour: Math.round(Number(body.endHour)) } : {}),
+      ...(body.minGapMinutes !== undefined ? { minGapMinutes: Math.round(Number(body.minGapMinutes)) } : {}),
+      ...(body.maxPerHour !== undefined ? { maxPerHour: Math.round(Number(body.maxPerHour)) } : {}),
+    });
+    db.addEvent('info', 'outbound.config', saved.enabled ? `Outbound on, ${saved.dailyCap}/day` : 'Outbound off', req.session.username);
+    res.json({ ok: true, config: saved });
+  });
+
+  router.post('/outbound/start', waLimiter, (req, res) => {
+    const outbound = require('../lib/outbound');
+    const cfg = outbound.getOutboundConfig();
+    const todaySent = typeof db.getTodaySentCount === 'function' ? db.getTodaySentCount() : 0;
+    if (todaySent >= cfg.dailyCap) {
+      return res.status(400).json({ ok: false, error: 'Daily cap already reached. Try again tomorrow.' });
+    }
+    outbound.setOutboundConfig({ enabled: true });
+    db.addEvent('info', 'outbound.start', `Outbound started (${todaySent}/${cfg.dailyCap} sent today)`, req.session.username);
+    res.json({ ok: true, running: true });
+  });
+
+  router.post('/outbound/pause', waLimiter, (req, res) => {
+    const outbound = require('../lib/outbound');
+    outbound.setOutboundConfig({ enabled: false });
+    db.addEvent('info', 'outbound.pause', 'Outbound paused', req.session.username);
+    res.json({ ok: true, running: false });
+  });
+
+  router.delete('/outbound/:id', (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Bad lead id.' });
+    let row;
+    try {
+      row = db.db.prepare('SELECT status FROM leads WHERE id = ?').get(id);
+    } catch {
+      row = null;
+    }
+    if (!row) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+    if (!['pending', 'queued', 'failed', 'scheduled'].includes(row.status)) {
+      return res.status(400).json({ ok: false, error: 'Only pending/failed leads can be removed.' });
+    }
+    try {
+      db.db.prepare('DELETE FROM leads WHERE id = ?').run(id);
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Could not delete lead.' });
+    }
+    db.addEvent('info', 'outbound.deleted', `Removed lead #${id}`, req.session.username);
+    res.json({ ok: true });
+  });
 
   /* ------------------------------ fallbacks ---------------------------- */
 

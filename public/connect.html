@@ -153,6 +153,14 @@
               <svg class="icon icon-sm"><use href="#i-message" /></svg>
               <span class="font-body-sm text-body-sm">Instructions</span>
             </a>
+            <a
+              href="/outbound"
+              data-nav="outbound"
+              class="flex items-center gap-3 rounded-xl px-4 py-2.5 text-on-surface-variant transition-all duration-200 hover:bg-surface-container-low hover:text-on-surface"
+            >
+              <svg class="icon icon-sm"><use href="#i-chat" /></svg>
+              <span class="font-body-sm text-body-sm">Outbound</span>
+            </a>
           </div>
         </section>
 
@@ -203,6 +211,7 @@
       >
         <nav class="flex items-center gap-1 lg:hidden">
           <a href="/" data-nav="connect" class="rounded-lg px-3 py-2 text-body-sm text-on-surface-variant bg-surface-container text-on-surface font-medium">Connect</a>
+          <a href="/outbound" data-nav="outbound" class="rounded-lg px-3 py-2 text-body-sm text-on-surface-variant">Outbound</a>
           <a href="/instructions" data-nav="instructions" class="rounded-lg px-3 py-2 text-body-sm text-on-surface-variant"
             >Instructions</a
           >
@@ -391,9 +400,12 @@
         <li class="flex items-center justify-between gap-4 border-t border-outline-variant/20 pt-3">
           <span class="flex items-center gap-3 text-body-sm text-on-surface">
             <svg class="icon icon-sm text-on-surface-variant" data-check="automation"><use href="#i-info" /></svg>
-            Replying to customers
+            Inbound AI replies
           </span>
-          <span class="text-body-sm font-medium text-on-surface" data-bind="check-automation">—</span>
+          <label class="flex cursor-pointer items-center gap-3">
+            <span class="text-body-sm font-medium text-on-surface" data-bind="check-automation">—</span>
+            <input type="checkbox" data-action="toggle-inbound" class="focusable h-5 w-5 accent-secondary" title="Turn inbound AI replies on or off" />
+          </label>
         </li>
       </ul>
     </div>

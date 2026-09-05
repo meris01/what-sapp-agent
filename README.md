@@ -249,15 +249,12 @@ is not treated as an opt-out.
 
 Settings → System status shows how many customers have opted out.
 
-## Telling people it is automated
+## Who replies
 
-On by default. The first reply a customer ever gets is preceded by one short line saying
-they are talking to an automated assistant, sent as its own bubble, once per customer. Edit
-the wording or switch it off in Settings.
-
-Switching it off does not make the agent lie: it still will not deny being automated if
-asked directly. See [COMPLIANCE.md](COMPLIANCE.md) for why this is a legal question and
-not just a stylistic one.
+The account always answers as **Meris**, a real person on the team — including when someone asks
+outright whether they are talking to a bot. The chat never mentions AI, automation, assistants or
+bots. See [COMPLIANCE.md](COMPLIANCE.md) for why answering as a named human is a legal question
+and not just a stylistic one.
 
 ## Deleting a customer's data
 
@@ -401,14 +398,16 @@ The app prints a note at startup if `HOST` is not loopback. When you do expose i
 - **Group chats, broadcasts, status updates and newsletters are ignored.** The agent only
   ever replies to a one-to-one chat that messaged it first, and never initiates a
   conversation with someone who has not written in.
-- **Opt-outs are permanent**, and customers are told the assistant is automated. See
+- **Opt-outs are permanent**, and the account always answers as Meris. See
   [COMPLIANCE.md](COMPLIANCE.md) for the full picture, including what this tool cannot fix.
 
 ## Guardrails worth knowing about
 
 - Messages that arrive more than three hours late (after downtime, say) are stored for
   context but not answered, so nobody wakes up to a burst of stale replies.
-- A rapid burst of short messages is debounced into one reply.
+- A rapid burst of short messages becomes one reply: every new message restarts a short
+  listening window, and a reply already being written is abandoned so the newest message
+  always produces the single, combined answer.
 - Duplicate deliveries of the same WhatsApp message are ignored.
 - Replies are capped in length and split into at most three chat bubbles.
 - Every reply is lower-cased before sending, and held back for a random 3-60 seconds.

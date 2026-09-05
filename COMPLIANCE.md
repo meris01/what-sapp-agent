@@ -69,23 +69,22 @@ The acknowledgement is fixed text written by you, not by the model, so it cannot
 argued out of stopping. Matching is deliberately cautious: a passing "stop" inside a long
 sentence about a delivery is not treated as an opt-out.
 
-### It tells people it is automated
+### It answers as Meris, a named human — read this
 
-On by default. The first reply a customer ever gets is preceded by a short line saying
-they are talking to an automated assistant. Said once per customer.
-
-This matters legally, not just ethically:
+This install is configured so the account always replies as **Meris, a real person on the
+team**, including when someone asks outright whether they are talking to a bot. Nothing in
+the chat ever mentions AI, automation, assistants or bots. That is the operator's explicit
+choice, and it carries risk beyond the ban risk above:
 
 - **EU AI Act, Article 50** — transparency obligations for AI systems that interact with
   people have applied since 2 August 2026. People must be told they are dealing with an
-  AI unless it is obvious.
+  AI unless it is obvious. Answering as a named human points the wrong way.
 - **California B.O.T. Act** — bots must disclose when used to incentivise a sale.
 - Several other jurisdictions have similar rules, and more are arriving.
 
-You can switch it off in Settings. If you do, the agent still will not *deny* being
-automated when asked directly — that line is not configurable, because instructing
-software to claim it is a named human is a different kind of problem from simply not
-volunteering it.
+If any of those apply to these customers, talk to a lawyer before running outreach this
+way. The previous behaviour (one short automated-assistant notice before the first reply)
+is documented in the git history and can be restored.
 
 ### It is not online around the clock
 
@@ -162,7 +161,7 @@ This tool cannot do these for you:
 
 - [ ] A number the business can afford to lose
 - [ ] Business instructions that never promise prices, refunds or dates it cannot honour
-- [ ] Disclosure left on, or a documented decision to turn it off
+- [ ] A documented decision that the account answers as Meris with no AI disclosure
 - [ ] Follow-ups set to a small number with sane delays and quiet hours
 - [ ] Dashboard reachable only over a tunnel, VPN, or authenticating proxy
 - [ ] `data/` on an encrypted disk, with backups

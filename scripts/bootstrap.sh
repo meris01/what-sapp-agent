@@ -36,8 +36,8 @@ export NEEDRESTART_MODE=a
 
 say "updating package lists..."
 apt-get update -qq >/dev/null 2>&1 || die "apt-get update failed."
-apt-get install -y -qq git curl ca-certificates >/dev/null 2>&1 || die "could not install git and curl."
-say "git and curl ready"
+apt-get install -y -qq git curl ca-certificates build-essential python3 >/dev/null 2>&1 || die "could not install prerequisites."
+say "git, curl and build tools ready"
 
 # --- node -------------------------------------------------------------------
 NODE_OK=0

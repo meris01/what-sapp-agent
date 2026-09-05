@@ -17,6 +17,7 @@ const { createApp } = require('./app');
 const { createWhatsAppClient } = require('./lib/whatsapp');
 const { Agent } = require('./lib/agent');
 const { Scheduler } = require('./lib/scheduler');
+const { OutboundScheduler, pickOutboundGapMs } = require('./lib/outboundScheduler');
 
 ensureDirs();
 
@@ -66,6 +67,85 @@ function main() {
   const agent = new Agent(wa);
   const scheduler = new Scheduler(agent);
 
+  // Outbound: human-paced cold sender backed by the SQLite leads table.
+  // One send max per tick, random lognormal gaps, daily + hourly caps,
+  // working-window only. Nothing sends until enabled on /outbound.
+  // NOTE: leads rows are keyed by numeric id (db.mark* matches id OR phone,
+  // never a full JID), so every store call passes lead.id first.
+  const leadKeyOf = (lead) => {
+    if (lead && Number.isInteger(lead.id)) return lead.id;
+    if (lead && lead.phone) return String(lead.phone).replace(/\D/g, '');
+    return String((lead && lead.jid) || '').split('@')[0].replace(/\D/g, '');
+  };
+  const outboundStore = {
+    getDueLead: (nowMs) => {
+      try {
+        const row = db.db
+          .prepare(
+            "SELECT id, phone, jid, name, message, status FROM leads WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ? ORDER BY scheduled_at LIMIT 1"
+          )
+          .get(nowMs);
+        return row ? { id: row.id, phone: row.phone, jid: row.jid, name: row.name, text: row.message, message: row.message } : null;
+      } catch {
+        return null;
+      }
+    },
+    getPendingLead: () => {
+      try {
+        const row = db.db
+          .prepare("SELECT id, phone, jid, name, message FROM leads WHERE status = 'pending' ORDER BY id LIMIT 1")
+          .get();
+        return row ? { id: row.id, phone: row.phone, jid: row.jid, name: row.name, text: row.message, message: row.message } : null;
+      } catch {
+        return null;
+      }
+    },
+    setLeadScheduledAt: (leadOrKey, ts) => {
+      try {
+        const key = leadOrKey && typeof leadOrKey === 'object' ? leadKeyOf(leadOrKey) : leadOrKey;
+        db.markScheduled(key, ts);
+      } catch {
+        // ignore
+      }
+    },
+    markLeadSent: (leadOrKey) => {
+      try {
+        const key = leadOrKey && typeof leadOrKey === 'object' ? leadKeyOf(leadOrKey) : leadOrKey;
+        db.markSent(key);
+      } catch {
+        // ignore
+      }
+    },
+    skipLead: (leadOrKey) => {
+      try {
+        const key = leadOrKey && typeof leadOrKey === 'object' ? leadKeyOf(leadOrKey) : leadOrKey;
+        db.markLeadNotContacted(key, 'skipped');
+      } catch {
+        // ignore
+      }
+    },
+    countScheduledFuture: (nowMs) => {
+      try {
+        const row = db.db
+          .prepare("SELECT COUNT(*) AS n FROM leads WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at > ?")
+          .get(nowMs);
+        return row ? Number(row.n) : 0;
+      } catch {
+        return 0;
+      }
+    },
+  };
+  const outbound = new OutboundScheduler(agent, wa, {
+    store: outboundStore,
+    isPaused: () => {
+      try {
+        return require('./lib/settings').isPaused();
+      } catch {
+        return false;
+      }
+    },
+  });
+
   agent.attach();
 
   const app = createApp({ wa, agent });
@@ -85,6 +165,7 @@ function main() {
 
   db.purgeOldData();
   scheduler.start();
+  outbound.start();
   wa.start().catch((err) => logger.error({ err: err.message }, 'initial WhatsApp start failed'));
 
   wa.on('status', (status) => {
@@ -99,6 +180,11 @@ function main() {
     shuttingDown = true;
     logger.info({ signal }, 'shutting down');
     scheduler.stop();
+    try {
+      outbound.stop();
+    } catch {
+      // ignore
+    }
     server.close();
     try {
       await wa.stop();

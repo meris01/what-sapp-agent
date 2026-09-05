@@ -24,6 +24,9 @@ const MAX_MESSAGE_AGE_MS = 3 * 60 * 60 * 1000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Global pause or the inbound-only switch: the AI answers no incoming chats. */
+const inboundOff = () => settings.isPaused() || settings.isInboundPaused();
+
 /** Strips artefacts models sometimes add and enforces a hard length cap. */
 function sanitiseReply(raw) {
   let text = String(raw || '').trim();
@@ -76,6 +79,11 @@ class Agent {
     this.running = new Map(); // jid -> Promise
     this.active = 0;
     this.waiters = [];
+    // Reply generation counter per chat. Every new inbound message bumps it;
+    // a reply cycle whose number no longer matches was superseded by a newer
+    // message and must stop quietly so the newest cycle sends the single,
+    // combined answer.
+    this.epochs = new Map(); // jid -> int
     // Presence: how many chats are mid-reply, and the timer that takes the
     // account back offline once none are.
     this.busyChats = 0;
@@ -116,6 +124,12 @@ class Agent {
     db.addMessage(jid, 'assistant', String(text).slice(0, config.maxInboundChars), waId);
     db.markOutbound(jid);
     db.markHumanTakeover(jid);
+    try {
+      const phone = String(jid || '').split('@')[0].replace(/\D/g, '');
+      if (phone && typeof db.markLeadNotContacted === 'function') db.markLeadNotContacted(phone, 'human_takeover');
+    } catch {
+      // ignore
+    }
 
     // Their own client marks the chat read, so stop tracking it here.
     this.unread.delete(jid);
@@ -142,6 +156,12 @@ class Agent {
    */
   #handleOptOut(jid, key) {
     db.markOptedOut(jid);
+    try {
+      const phone = String(jid || '').split('@')[0].replace(/\D/g, '');
+      if (phone && typeof db.markLeadOptedOut === 'function') db.markLeadOptedOut(phone, 'opted_out');
+    } catch {
+      // ignore
+    }
     this.unread.delete(jid);
 
     const pending = this.pending.get(jid);
@@ -291,6 +311,16 @@ class Agent {
     db.markInbound(jid);
     db.bumpMemoryCounter(jid);
 
+    // Outbound lead replied: flip tracking so the dashboard stops showing
+    // "sent, awaiting reply". Runs before any early return so the flip
+    // happens even in taken-over / paused / stale chats.
+    try {
+      const phone = String(jid || '').split('@')[0].replace(/\D/g, '');
+      if (phone && typeof db.markReplied === 'function') db.markReplied(phone);
+    } catch {
+      // Tracking must never break replies.
+    }
+
     // Keep recording the conversation, but never answer one a person has taken
     // over - not now, and not for any later message in that chat.
     if (db.isHumanHandled(jid)) {
@@ -320,8 +350,8 @@ class Agent {
       return;
     }
 
-    if (settings.isPaused()) {
-      db.addEvent('info', 'agent.paused', 'Message received while automation is paused');
+    if (inboundOff()) {
+      db.addEvent('info', 'agent.paused', 'Message received while inbound replies are off');
       return;
     }
 
@@ -330,22 +360,30 @@ class Agent {
       return;
     }
 
-    // Wait a moment so a burst of short messages becomes one reply.
+    // Wait for the last message: every new message restarts the window, so a
+    // burst of questions becomes one reply. The epoch lets a reply that is
+    // already being written notice it was superseded and stop, so two rapid
+    // questions never produce two separate answers.
     const existing = this.pending.get(jid);
     if (existing) clearTimeout(existing.timer);
 
+    const epoch = (this.epochs.get(jid) || 0) + 1;
+    this.epochs.set(jid, epoch);
+
     const timer = setTimeout(() => {
       this.pending.delete(jid);
-      this.#enqueue(jid, () => this.#respond(jid));
+      this.#enqueue(jid, () => this.#respond(jid, epoch));
     }, config.inboundDebounceMs);
 
     if (typeof timer.unref === 'function') timer.unref();
     this.pending.set(jid, { timer });
   }
 
-  async #respond(jid) {
-    if (settings.isPaused() || !settings.isConfigured() || !this.wa.isConnected()) return;
+  async #respond(jid, epoch) {
+    if (inboundOff() || !settings.isConfigured() || !this.wa.isConnected()) return;
     if (db.isHumanHandled(jid)) return;
+    // A newer message arrived while this cycle was queued behind another one.
+    if (epoch !== undefined && epoch !== this.epochs.get(jid)) return;
 
     const history = db.getHistory(jid, config.historyLimit);
     if (!history.length || history[history.length - 1].role !== 'customer') return;
@@ -369,6 +407,10 @@ class Agent {
         maxTokens: 400,
       });
 
+      // They wrote again while the model was thinking: stop here. The newer
+      // cycle re-reads the full history and sends the one combined answer.
+      if (epoch !== undefined && epoch !== this.epochs.get(jid)) return;
+
       const reply = sanitiseReply(result.text);
       if (!reply) throw new Error('Model produced an empty reply.');
 
@@ -379,17 +421,29 @@ class Agent {
       const typingAt = answerAt - typingMs;
       const readAt = typingAt - humanise.pickReadGapMs();
 
-      if (!(await this.#waitUntil(jid, readAt))) return this.#withhold(jid);
+      const readState = await this.#waitUntil(jid, readAt, epoch);
+      if (readState === 'takeover') return this.#withhold(jid);
+      if (readState !== 'ok') return;
 
       // Coming online, opening the chat, then typing - in that order, the way
       // a person picking up their phone would.
+      let superseded = false;
       const delivered = await this.#whileOnline(async () => {
         await this.#openChat(jid);
-        if (!(await this.#waitUntil(jid, typingAt))) return null;
+        const typingState = await this.#waitUntil(jid, typingAt, epoch);
+        if (typingState !== 'ok') {
+          superseded = typingState === 'stale';
+          return null;
+        }
         return this.#deliver(jid, this.#withDisclosure(jid, conversation, reply));
       });
 
-      if (delivered === null) return this.#withhold(jid);
+      if (delivered === null) {
+        // A superseded cycle stops silently: the newer cycle sends the one
+        // combined answer. Only a real takeover is logged as withheld.
+        if (!superseded) this.#withhold(jid);
+        return;
+      }
       if (!delivered) return;
       db.markDisclosed(jid);
 
@@ -405,14 +459,12 @@ class Agent {
   }
 
   /**
-   * Puts the "this is automated" line in front of the very first reply a
-   * customer ever gets, as its own message bubble. Said once per customer.
+   * The account replies as Meris, a real person on the team, so nothing is
+   * ever prepended about automation. Kept as a pass-through (rather than
+   * deleting the call site) so the reply pipeline stays untouched.
    */
   #withDisclosure(jid, conversation, reply) {
-    const disclosure = settings.getDisclosure();
-    if (!disclosure.enabled) return reply;
-    if (conversation && conversation.disclosed_at) return reply;
-    return `${disclosure.text}${CHUNK_SEPARATOR}${reply}`;
+    return reply;
   }
 
   /** Records that a finished reply was thrown away because a person stepped in. */
@@ -424,14 +476,19 @@ class Agent {
   /**
    * Sleeps until `timestamp`, checking often enough that a person picking the
    * chat up mid-wait stops the reply straight away rather than at the end.
-   * Returns false if the chat was taken over while waiting.
+   * Returns 'ok' when the wait completed, 'takeover' when a person stepped
+   * in, or 'stale' when a newer message superseded this reply cycle.
    */
-  async #waitUntil(jid, timestamp) {
+  async #waitUntil(jid, timestamp, epoch) {
+    const superseded = () => epoch !== undefined && epoch !== this.epochs.get(jid);
     while (Date.now() < timestamp) {
-      if (db.isHumanHandled(jid)) return false;
+      if (db.isHumanHandled(jid)) return 'takeover';
+      if (superseded()) return 'stale';
       await sleep(Math.min(WAIT_POLL_MS, timestamp - Date.now()));
     }
-    return !db.isHumanHandled(jid);
+    if (db.isHumanHandled(jid)) return 'takeover';
+    if (superseded()) return 'stale';
+    return 'ok';
   }
 
   /* -------------------------------- sending ------------------------------- */
@@ -528,6 +585,71 @@ class Agent {
     } finally {
       this.#release();
     }
+  }
+
+  /* ------------------------------- outbound ------------------------------- */
+
+  /**
+   * Sends one cold outbound first message with the human ritual
+   * (online -> blue ticks n/a -> typing -> send -> linger -> offline).
+   * The template is sent verbatim (no lower-casing: business names matter).
+   * After a successful send the lead flows into the existing follow-up
+   * engine via scheduleFollowup(jid).
+   *
+   * @param {{ phone?: string, jid?: string, message?: string, text?: string, id?: number|string, name?: string|null }} lead
+   * @returns {Promise<boolean>} True when a message went out.
+   */
+  async sendOutbound(lead) {
+    const phone = String(lead && (lead.phone || (lead.jid || '').split('@')[0]) || '').replace(/\D/g, '');
+    const jid = (lead && lead.jid) || (phone ? `${phone}@s.whatsapp.net` : null);
+    const text = String((lead && (lead.message ?? lead.text)) || '').trim();
+    if (!jid || !phone || !text) return false;
+    if (settings.isPaused() || !this.wa.isConnected()) return false;
+    if (db.isOptedOut(jid) || db.isHumanHandled(jid)) return false;
+    // Daily cap enforced at send time too, so nothing can bypass the scheduler.
+    try {
+      const cfg = require('./outbound').getOutboundConfig();
+      if (typeof db.getTodaySentCount === 'function' && db.getTodaySentCount() >= cfg.dailyCap) return false;
+    } catch {
+      // ignore
+    }
+
+    db.upsertConversation(jid, (lead && lead.name) || null);
+    const delivered = await this.#whileOnline(() => this.#deliverRaw(jid, text));
+    if (!delivered) {
+      if (typeof db.markFailed === 'function') db.markFailed(lead.id ?? phone, 'send_failed');
+      return false;
+    }
+    if (typeof db.markSent === 'function') db.markSent(lead.id ?? phone);
+    db.addEvent('info', 'outbound.sent', `Outbound sent to +${phone}`);
+    this.scheduleFollowup(jid);
+    return true;
+  }
+
+  /**
+   * Verbatim deliver (no sanitiseReply / lower-casing): cold templates carry
+   * business names and must go out exactly as imported.
+   */
+  async #deliverRaw(jid, text) {
+    if (db.isHumanHandled(jid)) return false;
+    const chunks = splitIntoChunks(text).slice(0, MAX_CHUNKS);
+    const sentChunks = [];
+    for (let i = 0; i < chunks.length; i += 1) {
+      if (db.isHumanHandled(jid)) break;
+      const chunk = chunks[i];
+      await this.wa.setTyping(jid, true);
+      await sleep(humanise.typingDurationMs(chunk));
+      await this.wa.setTyping(jid, false);
+      const result = await this.wa.sendText(jid, chunk);
+      db.recordSentMessage(result && result.waId);
+      sentChunks.push(chunk);
+      if (i < chunks.length - 1) await sleep(CHUNK_GAP_MS);
+    }
+    if (!sentChunks.length) return false;
+    db.addMessage(jid, 'assistant', sentChunks.join(CHUNK_SEPARATOR));
+    db.markOutbound(jid);
+    db.bumpMemoryCounter(jid);
+    return true;
   }
 
   /* ------------------------------- follow-ups ----------------------------- */

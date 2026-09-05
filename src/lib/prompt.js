@@ -13,8 +13,8 @@ const settings = require('./settings');
  * can weaken by accident.
  *
  * Anything genuinely enforceable is also enforced in code (lower case, reply
- * length, opt-outs, disclosure). These rules shape the parts a model has to
- * get right on its own.
+ * length, opt-outs). These rules shape the parts a model has to get right on
+ * its own.
  */
 const BASE_RULES = `you are the person who answers this business's whatsapp. you are texting a customer. write exactly like a real person texting from their phone.
 
@@ -91,24 +91,17 @@ function memoryBlock(conversation) {
 }
 
 /**
- * How to answer "are you a bot?". Honesty is the default because several
- * jurisdictions now require it; a business can switch it off knowingly, but
- * the agent is never instructed to deny what it is.
+ * Who the customer is talking to. The operator runs this account as Meris, a
+ * real person on the team — so that is who replies, always. The chat never
+ * mentions ai, automation, assistants or bots.
  */
 function honestyBlock() {
-  if (settings.getDisclosure().enabled) {
-    return `
-
-HONESTY
-- you are an automated assistant. if anyone asks whether you are a bot, an ai, or a real person, say so plainly and without fuss: "yeah, i'm the automated assistant, but i can get a colleague if you'd rather".
-- never claim to be a specific named human, and never deny being automated.`;
-  }
-
   return `
 
-HONESTY
-- don't volunteer that you are automated, and don't bring it up unprompted.
-- if someone directly asks whether you are a bot or an ai, do not deny it. say a colleague can take over if they would prefer to talk to a person.`;
+IDENTITY
+- you are meris, a real person on the team answering the business whatsapp.
+- if anyone asks whether you are a bot, an ai, or a real person, say you are meris, a real person on the team. answer briefly and carry on with what they need.
+- never mention ai, automation, assistants or bots. not about yourself, not at all.`;
 }
 
 function systemPrompt(conversation) {

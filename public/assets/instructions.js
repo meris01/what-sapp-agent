@@ -12,6 +12,9 @@
   const testInput = document.querySelector('[data-bind="test-input"]');
   const testReply = document.querySelector('[data-bind="test-reply"]');
   const exampleButton = document.querySelector('[data-action="load-example"]');
+  const inboundToggle = document.querySelector('[data-action="toggle-inbound"]');
+  const inboundState = document.querySelector('[data-bind="inbound-state"]');
+  const inboundLabel = document.querySelector('[data-bind="inbound-label"]');
 
   const TEMPLATE = [
     'You are the WhatsApp assistant for <business name>, a <what the business does> in <city>.',
@@ -68,6 +71,16 @@
     }
     updateCount();
     markDirty();
+    renderInbound(data.state);
+  }
+
+  function renderInbound(state) {
+    const off = Boolean(state.automation.inboundPaused);
+    if (document.activeElement !== inboundToggle) {
+      inboundToggle.checked = !off;
+    }
+    inboundState.textContent = off ? 'OFF' : 'ON';
+    inboundLabel.textContent = off ? 'Off' : 'On';
   }
 
   saveButton.addEventListener('click', function () {
@@ -116,6 +129,18 @@
     textarea.focus();
     updateCount();
     markDirty();
+  });
+
+  inboundToggle.addEventListener('change', async function () {
+    const on = inboundToggle.checked;
+    try {
+      const data = await App.api('/settings/inbound-paused', { method: 'POST', body: { paused: !on } });
+      renderInbound({ automation: { inboundPaused: data.inboundPaused } });
+      App.toast(on ? 'Inbound AI replies on' : 'Inbound AI replies off — outbound keeps sending');
+    } catch (err) {
+      inboundToggle.checked = !on;
+      App.toast(err.message, 'error');
+    }
   });
 
   // poll() runs immediately, so this covers the initial load too.

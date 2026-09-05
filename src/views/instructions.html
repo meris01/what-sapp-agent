@@ -14,6 +14,22 @@
       </p>
     </div>
 
+    <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
+      <div class="flex items-center gap-4">
+        <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-primary" data-bind="inbound-icon-wrap">
+          <svg class="icon text-on-primary"><use href="#i-chat" data-bind="inbound-icon" /></svg>
+        </span>
+        <div>
+          <p class="font-title-md text-title-md text-on-surface">Inbound AI replies <span data-bind="inbound-state" class="ml-2 rounded-full bg-surface-container px-3 py-1 font-body-sm text-body-sm text-on-surface-variant">—</span></p>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">When off, incoming chats get no AI answer. Outbound keeps sending.</p>
+        </div>
+      </div>
+      <label class="flex cursor-pointer items-center gap-3">
+        <span class="font-body-sm text-body-sm text-on-surface-variant" data-bind="inbound-label">On</span>
+        <input type="checkbox" data-action="toggle-inbound" class="focusable h-6 w-6 accent-secondary" title="Turn inbound AI replies on or off" checked />
+      </label>
+    </div>
+
     <div class="mt-8 flex flex-col gap-gutter md:flex-row">
       <div class="flex min-w-0 flex-1 flex-col">
         <div

@@ -14,6 +14,7 @@
   const errorBox = document.querySelector('[data-bind="connection-error"]');
   const unlinkButton = document.querySelector('[data-action="unlink"]');
   const refreshButton = document.querySelector('[data-action="refresh-qr"]');
+  const inboundToggle = document.querySelector('[data-action="toggle-inbound"]');
   const pageTitle = document.querySelector('[data-bind="page-title"]');
   const pageSubtitle = document.querySelector('[data-bind="page-subtitle"]');
 
@@ -124,11 +125,21 @@
       document.querySelector('[data-bind="check-instructions"]')
     );
 
-    const live = connected && state.automation.configured && !state.automation.paused;
+    const live = connected && state.automation.configured && !state.automation.paused && !state.automation.inboundPaused;
+    if (document.activeElement !== inboundToggle) {
+      inboundToggle.checked = !state.automation.inboundPaused;
+    }
+    const inboundLabel = state.automation.inboundPaused
+      ? 'Off'
+      : !state.automation.configured
+        ? 'Waiting for setup'
+        : state.automation.paused
+          ? 'Paused'
+          : 'On';
     setCheck(
       'automation',
       live,
-      live ? 'Active' : state.automation.paused ? 'Paused' : 'Waiting for setup',
+      inboundLabel,
       document.querySelector('[data-bind="check-automation"]')
     );
   }
@@ -161,6 +172,18 @@
         App.toast(err.message, 'error');
       }
     });
+  });
+
+  inboundToggle.addEventListener('change', async function () {
+    const on = inboundToggle.checked;
+    try {
+      await App.api('/settings/inbound-paused', { method: 'POST', body: { paused: !on } });
+      App.toast(on ? 'Inbound AI replies on' : 'Inbound AI replies off — outbound keeps sending');
+      await refresh();
+    } catch (err) {
+      inboundToggle.checked = !on;
+      App.toast(err.message, 'error');
+    }
   });
 
   App.poll(refresh, 2500);

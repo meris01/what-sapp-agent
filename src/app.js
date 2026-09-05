@@ -37,6 +37,7 @@ function securityHeaders(_req, res, next) {
 
 const PAGES = {
   '/': 'connect.html',
+  '/outbound': 'outbound.html',
   '/settings': 'settings.html',
   '/instructions': 'instructions.html',
   '/team': 'team.html',
