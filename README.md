@@ -458,5 +458,8 @@ confidentiality) and the crypto helpers.
   follow-ups few and polite, and use a number you can afford to lose.
 - Media is not read. Images, voice notes and documents reach the model as a placeholder
   like `[voice message]`, and the assistant asks the customer to describe it in text.
-- One WhatsApp account per installation. Run separate instances, with separate
-  `DATA_DIR`s and ports, for more.
+- Up to 5 WhatsApp numbers per installation (Connection page → + Add number).
+  Each keeps its own session under `data/wa-auth/<id>/`. Inbound replies go
+  back out through the number that received them; the outbound daily goal is
+  split evenly across every connected number (70/day over 2 numbers = 35 + 35,
+  max 35 per number). New numbers warm up from 10/day for two weeks.

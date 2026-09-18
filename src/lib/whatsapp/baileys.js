@@ -85,8 +85,13 @@ class BaileysProvider extends WhatsAppProvider {
     };
   }
 
-  constructor() {
+  constructor(opts = {}) {
     super();
+    // Multi-account: every linked number keeps its own auth directory so up
+    // to five sessions can live side by side. `authDir` overrides the legacy
+    // single-account path; `accountId` tags every emitted event.
+    this.accountId = opts.accountId || opts.id || 'acc1';
+    this.authDir = opts.authDir || path.join(AUTH_DIR, this.accountId);
     this.sock = null;
     this.state = STATES.DISCONNECTED;
     this.qrDataUrl = null;
@@ -113,7 +118,20 @@ class BaileysProvider extends WhatsAppProvider {
 
     try {
       ensureDirs();
-      const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+      fs.mkdirSync(this.authDir, { recursive: true, mode: 0o700 });
+      // Migrate a legacy single-account session into acc1 once.
+      try {
+        if (this.accountId === 'acc1' && this.authDir !== AUTH_DIR && fs.existsSync(path.join(AUTH_DIR, 'creds.json')) && !fs.existsSync(path.join(this.authDir, 'creds.json'))) {
+          for (const entry of fs.readdirSync(AUTH_DIR)) {
+            if (entry.startsWith('acc')) continue;
+            const src = path.join(AUTH_DIR, entry);
+            if (fs.statSync(src).isFile() && entry.endsWith('.json')) fs.copyFileSync(src, path.join(this.authDir, entry));
+          }
+        }
+      } catch {
+        // migration is best-effort
+      }
+      const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
       const { version } = await fetchLatestBaileysVersion().catch((err) => {
         logger.warn({ err: err.message }, 'could not fetch latest WA version, using bundled default');
         return { version: undefined };
@@ -209,8 +227,10 @@ class BaileysProvider extends WhatsAppProvider {
 
   #clearCredentials() {
     try {
-      for (const entry of fs.readdirSync(AUTH_DIR)) {
-        fs.rmSync(path.join(AUTH_DIR, entry), { force: true, recursive: true });
+      if (fs.existsSync(this.authDir)) {
+        for (const entry of fs.readdirSync(this.authDir)) {
+          fs.rmSync(path.join(this.authDir, entry), { force: true, recursive: true });
+        }
       }
     } catch (err) {
       logger.warn({ err: err.message }, 'could not clear WhatsApp credentials');
@@ -219,7 +239,7 @@ class BaileysProvider extends WhatsAppProvider {
 
   hasCredentials() {
     try {
-      return fs.existsSync(path.join(AUTH_DIR, 'creds.json'));
+      return fs.existsSync(path.join(this.authDir, 'creds.json'));
     } catch {
       return false;
     }
@@ -340,6 +360,7 @@ class BaileysProvider extends WhatsAppProvider {
             waId: msg.key.id ? `${jid}:${msg.key.id}` : null,
             text: text || placeholder,
             timestamp: Number(msg.messageTimestamp) * 1000 || Date.now(),
+            accountId: this.accountId,
           });
           continue;
         }
@@ -352,6 +373,7 @@ class BaileysProvider extends WhatsAppProvider {
           text: text || placeholder,
           isText: Boolean(text),
           timestamp: Number(msg.messageTimestamp) * 1000 || Date.now(),
+          accountId: this.accountId,
         });
       } catch (err) {
         logger.error({ err: err.message }, 'failed to handle inbound message');
@@ -414,6 +436,7 @@ class BaileysProvider extends WhatsAppProvider {
 
   getStatus() {
     return {
+      accountId: this.accountId,
       state: this.state,
       connected: this.state === STATES.CONNECTED,
       hasCredentials: this.hasCredentials(),

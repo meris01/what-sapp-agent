@@ -241,6 +241,17 @@ class Agent {
     }
   }
 
+  /** Send through one pinned account; falls back for single-account fakes. */
+  async _sendVia(jid, chunk, accountId) {
+    if (!accountId) return this.wa.sendText(jid, chunk);
+    try {
+      return await this.wa.sendText(jid, chunk, { accountId });
+    } catch (err) {
+      if (/not connected/i.test(String(err && err.message))) throw err;
+      return this.wa.sendText(jid, chunk);
+    }
+  }
+
   /** Applies the configured presence at startup. */
   async applyPresenceMode() {
     if (config.presenceMode === 'online') return this.wa.setPresence(true).catch(() => {});
@@ -302,11 +313,18 @@ class Agent {
   /* -------------------------------- inbound ------------------------------- */
 
   handleInbound(message) {
-    const { jid, waId, text, name, timestamp, key } = message;
+    const { jid, waId, text, name, timestamp, key, accountId } = message;
 
     if (db.messageExists(waId)) return; // duplicate delivery
 
     db.upsertConversation(jid, name);
+    // Remember which number received this chat: replies go back out through
+    // the same account so the customer never hears from a stranger number.
+    try {
+      if (accountId && typeof db.setConversationAccount === 'function') db.setConversationAccount(jid, accountId);
+    } catch {
+      // ignore
+    }
     db.addMessage(jid, 'customer', String(text).slice(0, config.maxInboundChars), waId);
     db.markInbound(jid);
     db.bumpMemoryCounter(jid);
@@ -493,7 +511,22 @@ class Agent {
 
   /* -------------------------------- sending ------------------------------- */
 
-  async #deliver(jid, reply) {
+  /** Which account owns this chat (the one that received it), if any. */
+  #accountFor(jid) {
+    try {
+      const conv = db.getConversation(jid);
+      if (conv && conv.account_id && this.wa && typeof this.wa.getProvider === 'function') {
+        const provider = this.wa.getProvider(conv.account_id);
+        if (provider && provider.isConnected()) return conv.account_id;
+      }
+    } catch {
+      // fall through to default routing
+    }
+    return null;
+  }
+
+  async #deliver(jid, reply, accountId = null) {
+    const via = accountId || this.#accountFor(jid);
     const chunks = splitIntoChunks(reply);
     const sentChunks = [];
 
@@ -509,11 +542,15 @@ class Agent {
       const chunk = chunks[i];
       const typingMs = humanise.typingDurationMs(chunk);
 
-      await this.wa.setTyping(jid, true);
+      if (via && typeof this.wa.setTyping === 'function' && this.wa.setTyping.length >= 3) await this.wa.setTyping(jid, true, via);
+      else await this.wa.setTyping(jid, true);
       await sleep(typingMs);
-      await this.wa.setTyping(jid, false);
+      if (via && typeof this.wa.setTyping === 'function' && this.wa.setTyping.length >= 3) await this.wa.setTyping(jid, false, via);
+      else await this.wa.setTyping(jid, false);
 
-      const result = await this.wa.sendText(jid, chunk);
+      const result = via && typeof this.wa.sendText === 'function'
+        ? await this._sendVia(jid, chunk, via)
+        : await this.wa.sendText(jid, chunk);
       // Recorded before anything else so the echo of our own message can never
       // be mistaken for the operator typing.
       db.recordSentMessage(result && result.waId);
@@ -615,13 +652,26 @@ class Agent {
     }
 
     db.upsertConversation(jid, (lead && lead.name) || null);
-    const delivered = await this.#whileOnline(() => this.#deliverRaw(jid, text));
+    const via = (lead && (lead.accountId || lead.account_id)) || this.#accountFor(jid) || null;
+    try {
+      if (via && typeof db.setConversationAccount === 'function') db.setConversationAccount(jid, via);
+    } catch {
+      // ignore
+    }
+    const delivered = await this.#whileOnline(() => this.#deliverRaw(jid, text, via));
     if (!delivered) {
       if (typeof db.markFailed === 'function') db.markFailed(lead.id ?? phone, 'send_failed');
       return false;
     }
     if (typeof db.markSent === 'function') db.markSent(lead.id ?? phone);
-    db.addEvent('info', 'outbound.sent', `Outbound sent to +${phone}`);
+    try {
+      if (via && db.db && typeof db.db.prepare === 'function') {
+        db.db.prepare('UPDATE leads SET sent_via = ?, account_id = COALESCE(account_id, ?) WHERE phone = ?').run(via, via, phone);
+      }
+    } catch {
+      // ignore
+    }
+    db.addEvent('info', 'outbound.sent', `Outbound sent to +${phone}${via ? ` via ${via}` : ''}`);
     this.scheduleFollowup(jid);
     return true;
   }
@@ -630,7 +680,7 @@ class Agent {
    * Verbatim deliver (no sanitiseReply / lower-casing): cold templates carry
    * business names and must go out exactly as imported.
    */
-  async #deliverRaw(jid, text) {
+  async #deliverRaw(jid, text, accountId = null) {
     if (db.isHumanHandled(jid)) return false;
     const chunks = splitIntoChunks(text).slice(0, MAX_CHUNKS);
     const sentChunks = [];
@@ -640,7 +690,7 @@ class Agent {
       await this.wa.setTyping(jid, true);
       await sleep(humanise.typingDurationMs(chunk));
       await this.wa.setTyping(jid, false);
-      const result = await this.wa.sendText(jid, chunk);
+      const result = await this._sendVia(jid, chunk, accountId);
       db.recordSentMessage(result && result.waId);
       sentChunks.push(chunk);
       if (i < chunks.length - 1) await sleep(CHUNK_GAP_MS);

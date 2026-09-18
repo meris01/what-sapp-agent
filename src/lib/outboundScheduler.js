@@ -79,9 +79,19 @@ const DEFAULTS = Object.freeze({
   dailyCap: 60,
   startHour: 9,
   endHour: 18,
-  minGapMinutes: 1,
-  maxPerHour: 8,
+  minGapMinutes: 8,
+  maxPerHour: 5,
 });
+
+// Per-number safety ceiling: even if the global goal is 70, no single SIM
+// ever exceeds this in a day. The goal is SPLIT, not multiplied.
+const PER_ACCOUNT_DAILY_MAX = 35;
+const PER_ACCOUNT_HOURLY_MAX = 5;
+const WARMUP_DAILY_CAP = 10;
+const WARMUP_DAYS = 14;
+
+/** Words from Baileys/WhatsApp that mean "slow down or lose the number". */
+const BAN_SIGNAL_RE = /(banned|blocked|spam|429|too many|rate.?limit|temporar|restrict|forbidden|logged.?out)/i;
 
 const PERSIST_KEY = 'outbound_schedule_v1';
 
@@ -701,11 +711,125 @@ class OutboundScheduler {
     return false;
   }
 
-  async _sendLead(lead) {
-    if (this.agent && typeof this.agent.sendOutbound === 'function') {
-      return await this.agent.sendOutbound(lead);
+  /** accountId -> sends today (DB ground truth + in-memory fallback). */
+  _sentTodayByAccount(nowMs) {
+    try {
+      if (dbLib && typeof dbLib.getTodaySentCountByAccount === 'function') {
+        const byAcc = dbLib.getTodaySentCountByAccount(nowMs);
+        if (byAcc && Object.keys(byAcc).length) return byAcc;
+      }
+    } catch {
+      // fall through
     }
-    return await sendHumanText(this.wa, lead.jid, lead.text, { random: this.random });
+    return {};
+  }
+
+  _sentThisHourByAccount(nowMs) {
+    try {
+      if (dbLib && typeof dbLib.getHourSentCountByAccount === 'function') {
+        return dbLib.getHourSentCountByAccount(nowMs) || {};
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  }
+
+  /** Healthy senders: manager-aware, else the single legacy connection. */
+  _healthySenders(nowMs) {
+    try {
+      if (this.wa && typeof this.wa.healthyAccounts === 'function') {
+        return this.wa.healthyAccounts(nowMs);
+      }
+    } catch {
+      // ignore
+    }
+    if (this.wa && typeof this.wa.isConnected === 'function' && this.wa.isConnected()) {
+      return [{ id: 'acc1', slot: 1, connected: true, enabled: true }];
+    }
+    return [];
+  }
+
+  /** Fair share of the global goal for one sender (split, never multiplied). */
+  _shareForAccount(cfg, healthyCount, account) {
+    const n = Math.max(1, healthyCount);
+    const base = Math.floor((cfg.dailyCap || 0) / n);
+    let share = Math.min(PER_ACCOUNT_DAILY_MAX, base + (base === 0 && cfg.dailyCap > 0 ? 0 : 0));
+    // Remainder goes to the lowest slots; this instance takes `base` and the
+    // scheduler's round-robin evens out the +1s over the day.
+    if (share <= 0 && cfg.dailyCap > 0) share = 1;
+    const warmupAt = account && (account.warmupStartedAt || account.warmup_started_at);
+    if (warmupAt && this.now() - Number(warmupAt) < WARMUP_DAYS * DAY_MS) {
+      share = Math.min(share, WARMUP_DAILY_CAP);
+    }
+    if (account && Number.isFinite(Number(account.dailyCap)) && Number(account.dailyCap) > 0) {
+      share = Math.min(share, Math.min(PER_ACCOUNT_DAILY_MAX, Math.floor(Number(account.dailyCap))));
+    }
+    return Math.max(1, share);
+  }
+
+  _pickSender(nowMs) {
+    const healthy = this._healthySenders(nowMs);
+    if (!healthy.length) return { sender: null, healthy };
+    const byAcc = this._sentTodayByAccount(nowMs);
+    let sender = null;
+    try {
+      if (this.wa && typeof this.wa.pickAccount === 'function') {
+        sender = this.wa.pickAccount(byAcc, nowMs);
+      }
+    } catch {
+      sender = null;
+    }
+    if (!sender) {
+      sender = [...healthy].sort((a, b) => (byAcc[a.id] || 0) - (byAcc[b.id] || 0))[0];
+    }
+    return { sender, healthy };
+  }
+
+  /** Ban-signal cooldown: park one number for an hour, keep the rest sending. */
+  _cooldownSender(accountId, reason) {
+    try {
+      if (dbLib && typeof dbLib.updateWhatsAppAccount === 'function' && accountId) {
+        const current = typeof dbLib.getWhatsAppAccount === 'function' ? dbLib.getWhatsAppAccount(accountId) : null;
+        dbLib.updateWhatsAppAccount(accountId, {
+          cooldown_until: Date.now() + HOUR_MS,
+          fail_count: (current && current.fail_count ? current.fail_count : 0) + 1,
+        });
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (dbLib && typeof dbLib.addEvent === 'function') {
+        dbLib.addEvent('warn', 'outbound.cooldown', `Paused ${accountId || 'sender'} for 1h (${reason})`);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async _sendLead(lead, sender) {
+    // Vary every send: {a|b} spintax + {{name}} so fingerprints can't match.
+    let text = lead.text;
+    try {
+      const outbound = require('./outbound');
+      if (typeof outbound.personalise === 'function' && typeof lead.message === 'string' && /\{|\{\{/.test(lead.message)) {
+        text = outbound.personalise(lead.message, lead, this.random);
+      } else if (typeof outbound.expandSpintax === 'function' && typeof text === 'string' && text.includes('{')) {
+        text = outbound.expandSpintax(text, this.random);
+      }
+    } catch {
+      // send the stored text verbatim
+    }
+    const withText = { ...lead, text, message: text };
+    if (sender && sender.id) withText.accountId = sender.id;
+    if (this.agent && typeof this.agent.sendOutbound === 'function') {
+      return await this.agent.sendOutbound(withText);
+    }
+    const target = sender && sender.id && this.wa && typeof this.wa.getProvider === 'function'
+      ? this.wa.getProvider(sender.id) || this.wa
+      : this.wa;
+    return await sendHumanText(target, lead.jid, text, { random: this.random });
   }
 
   async tick() {
@@ -745,7 +869,35 @@ class OutboundScheduler {
       if (this.sentToday(nowMs) >= cfg.dailyCap) return { sent: false, reason: 'daily-cap' };
       if (this.sentThisHour(nowMs) >= cfg.maxPerHour) return { sent: false, reason: 'hourly-cap' };
 
+      // Multi-account split: pick the sender with the fewest sends today,
+      // then enforce its fair share + per-number safety ceilings.
+      const { sender, healthy } = this._pickSender(nowMs);
+      if (!sender) return { sent: false, reason: 'disconnected' };
+      const byAcc = this._sentTodayByAccount(nowMs);
+      const byHour = this._sentThisHourByAccount(nowMs);
+      const myShare = this._shareForAccount(cfg, healthy.length, sender);
+      if ((byAcc[sender.id] || 0) >= myShare) {
+        // This number did its share — if every number did, the day is done.
+        const sharesDone = healthy.every((a) => (byAcc[a.id] || 0) >= this._shareForAccount(cfg, healthy.length, a));
+        if (sharesDone) return { sent: false, reason: 'daily-cap' };
+        return { sent: false, reason: 'account-cap' };
+      }
+      if ((byHour[sender.id] || 0) >= Math.min(cfg.maxPerHour, PER_ACCOUNT_HOURLY_MAX)) {
+        return { sent: false, reason: 'hourly-cap' };
+      }
+      // Persist the routing choice so stats/retries stay pinned to one sender.
       const lead = await this._getDueLead(nowMs);
+      if (lead && sender && sender.id && !lead.account_id && !lead.accountId) {
+        lead.accountId = sender.id;
+        try {
+          if (dbLib && dbLib.db && typeof dbLib.db.prepare === 'function') {
+            const key = Number.isInteger(lead.id) ? lead.id : lead.phone;
+            if (key !== undefined) dbLib.db.prepare('UPDATE leads SET account_id = ? WHERE id = ? OR phone = ?').run(sender.id, key, String(key));
+          }
+        } catch {
+          // ignore
+        }
+      }
       if (!lead) {
         // Nothing due: pace the next unscheduled lead. When the queue is
         // empty of scheduled sends (fresh start / fresh import), the first
@@ -782,10 +934,26 @@ class OutboundScheduler {
 
       let result;
       try {
-        result = await this._sendLead(lead);
+        result = await this._sendLead(lead, sender);
       } catch (err) {
+        const msg = err && err.message ? String(err.message) : 'send failed';
+        // Ban/rate signals park ONE number for an hour; the rest keep going.
+        if (BAN_SIGNAL_RE.test(msg)) {
+          this._cooldownSender(sender && sender.id, msg.slice(0, 80));
+          try {
+            if (typeof dbLib.markFailed === 'function') dbLib.markFailed(lead.id ?? lead.phone, 'rate_limited');
+          } catch {
+            // ignore
+          }
+          await this._setLeadScheduledAt(lead, nowMs + HOUR_MS);
+          return { sent: false, reason: 'account-cooldown' };
+        }
         // Back the lead off instead of hot-looping a failing send.
-        log('warn', { err: err && err.message, jid: lead.jid }, 'outbound send failed; backing off');
+        log('warn', { err: msg, jid: lead.jid }, 'outbound send failed; backing off');
+        await this._setLeadScheduledAt(lead, nowMs + 5 * MIN_MS);
+        return { sent: false, reason: 'send-failed' };
+      }
+      if (!result) {
         await this._setLeadScheduledAt(lead, nowMs + 5 * MIN_MS);
         return { sent: false, reason: 'send-failed' };
       }
@@ -796,15 +964,23 @@ class OutboundScheduler {
       try {
         const store = this._store();
         if (store && typeof store.markLeadSent === 'function') {
-          await store.markLeadSent(lead);
+          await store.markLeadSent({ ...lead, sentVia: sender && sender.id });
         }
       } catch (err) {
         log('warn', { err: err && err.message }, 'outbound: could not persist sent state');
       }
+      try {
+        if (dbLib && dbLib.db && typeof dbLib.db.prepare === 'function' && sender && sender.id) {
+          const key = Number.isInteger(lead.id) ? lead.id : lead.phone;
+          if (key !== undefined) dbLib.db.prepare('UPDATE leads SET sent_via = ? WHERE id = ? OR phone = ?').run(sender.id, key, String(key));
+        }
+      } catch {
+        // ignore
+      }
       this._persist();
       try {
         if (dbLib && typeof dbLib.addEvent === 'function') {
-          dbLib.addEvent('info', 'outbound.sent', `Outbound message sent (${this.sentToday(nowMs)}/${cfg.dailyCap} today)`);
+          dbLib.addEvent('info', 'outbound.sent', `Outbound via ${(sender && sender.id) || 'acc1'} (${this.sentToday(nowMs)}/${cfg.dailyCap} today)`);
         }
       } catch {
         // ignore
@@ -812,7 +988,7 @@ class OutboundScheduler {
 
       // Pace the follower: the next pending lead goes out one human gap later.
       await this._scheduleNextPending(nowMs);
-      return { sent: true, jid: lead.jid, result };
+      return { sent: true, jid: lead.jid, result, accountId: sender && sender.id };
     } finally {
       this.busy = false;
     }

@@ -122,7 +122,8 @@ window.App = (function () {
   /* --------------------------------- shell -------------------------------- */
 
   function renderShell(state, user) {
-    const wa = state.whatsapp;
+    const wa = state.whatsapp || {};
+    const accounts = Array.isArray(state.accounts) ? state.accounts : Array.isArray(wa.accounts) ? wa.accounts : [];
     const signedInAs = document.querySelector('[data-bind="signed-in-as"]');
     if (signedInAs && user) signedInAs.textContent = 'signed in as ' + user.username;
     const dot = document.querySelector('[data-bind="header-dot"]');
@@ -131,9 +132,16 @@ window.App = (function () {
     const accountState = document.querySelector('[data-bind="account-state"]');
 
     setDot(dot, wa.state);
-    if (label) label.textContent = STATE_LABELS[wa.state] || 'Unknown';
+    if (label) {
+      const connected = typeof wa.connectedCount === 'number' ? wa.connectedCount : accounts.filter(function (a) { return a.connected; }).length;
+      const total = typeof wa.totalCount === 'number' ? wa.totalCount : accounts.length || 1;
+      label.textContent = connected > 0 && total > 1 ? connected + '/' + total + ' linked' : STATE_LABELS[wa.state] || 'Unknown';
+    }
 
-    if (number) number.textContent = formatPhone(wa.phone) || 'Not linked';
+    if (number) {
+      const first = accounts.find(function (a) { return a.connected; }) || accounts[0];
+      number.textContent = (first && (formatPhone(first.phone) || first.displayName)) || formatPhone(wa.phone) || 'Not linked';
+    }
     if (accountState) {
       accountState.textContent = state.automation.paused
         ? 'Automation paused'

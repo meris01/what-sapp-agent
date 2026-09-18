@@ -14,7 +14,7 @@ const { secureDataFiles } = require('./lib/hardening');
 const users = require('./lib/users');
 const db = require('./lib/db');
 const { createApp } = require('./app');
-const { createWhatsAppClient } = require('./lib/whatsapp');
+const { createAccountManager } = require('./lib/whatsapp');
 const { Agent } = require('./lib/agent');
 const { Scheduler } = require('./lib/scheduler');
 const { OutboundScheduler, pickOutboundGapMs } = require('./lib/outboundScheduler');
@@ -63,7 +63,9 @@ function warnIfExposed() {
 }
 
 function main() {
-  const wa = createWhatsAppClient();
+  // Multi-account: up to 5 linked numbers, each with its own session.
+  // The manager speaks the legacy provider surface, so Agent/Scheduler work unchanged.
+  const wa = createAccountManager({ maxAccounts: 5 });
   const agent = new Agent(wa);
   const scheduler = new Scheduler(agent);
 
@@ -77,15 +79,18 @@ function main() {
     if (lead && lead.phone) return String(lead.phone).replace(/\D/g, '');
     return String((lead && lead.jid) || '').split('@')[0].replace(/\D/g, '');
   };
+  const toOutboundLead = (row) => (row
+    ? { id: row.id, phone: row.phone, jid: row.jid, name: row.name, text: row.message, message: row.message, account_id: row.account_id || null, accountId: row.account_id || null }
+    : null);
   const outboundStore = {
     getDueLead: (nowMs) => {
       try {
         const row = db.db
           .prepare(
-            "SELECT id, phone, jid, name, message, status FROM leads WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ? ORDER BY scheduled_at LIMIT 1"
+            "SELECT id, phone, jid, name, message, status, account_id FROM leads WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ? ORDER BY scheduled_at LIMIT 1"
           )
           .get(nowMs);
-        return row ? { id: row.id, phone: row.phone, jid: row.jid, name: row.name, text: row.message, message: row.message } : null;
+        return toOutboundLead(row);
       } catch {
         return null;
       }
@@ -93,9 +98,9 @@ function main() {
     getPendingLead: () => {
       try {
         const row = db.db
-          .prepare("SELECT id, phone, jid, name, message FROM leads WHERE status = 'pending' ORDER BY id LIMIT 1")
+          .prepare("SELECT id, phone, jid, name, message, account_id FROM leads WHERE status = 'pending' ORDER BY id LIMIT 1")
           .get();
-        return row ? { id: row.id, phone: row.phone, jid: row.jid, name: row.name, text: row.message, message: row.message } : null;
+        return toOutboundLead(row);
       } catch {
         return null;
       }
@@ -112,6 +117,14 @@ function main() {
       try {
         const key = leadOrKey && typeof leadOrKey === 'object' ? leadKeyOf(leadOrKey) : leadOrKey;
         db.markSent(key);
+        const via = leadOrKey && typeof leadOrKey === 'object' && (leadOrKey.sentVia || leadOrKey.accountId || leadOrKey.account_id);
+        if (via) {
+          try {
+            db.db.prepare('UPDATE leads SET sent_via = ? WHERE id = ? OR phone = ?').run(String(via), key, String(key));
+          } catch {
+            // ignore
+          }
+        }
       } catch {
         // ignore
       }

@@ -62,7 +62,7 @@
     if (!visible.length) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 7;
+      td.colSpan = 8;
       td.className = 'py-6 text-center text-on-surface-variant';
       td.textContent = q ? 'No leads match that search.' : 'No leads yet. Paste wa.me links above.';
       tr.appendChild(td);
@@ -89,6 +89,9 @@
       const st = document.createElement('td');
       st.className = 'py-2 pr-3';
       st.appendChild(pill(lead.status));
+      const via = document.createElement('td');
+      via.className = 'py-2 pr-3 whitespace-nowrap text-on-surface-variant';
+      via.textContent = lead.sent_via || lead.account_id || '—';
       const sched = document.createElement('td');
       sched.className = 'py-2 pr-3 whitespace-nowrap';
       sched.textContent = lead.status === 'scheduled' ? fmt(lead.scheduled_at) : '—';
@@ -113,7 +116,7 @@
         });
         act.appendChild(btn);
       }
-      tr.append(phone, msg, st, sched, sent, reply, act);
+      tr.append(phone, msg, st, via, sched, sent, reply, act);
       rows.appendChild(tr);
     }
   }
@@ -131,6 +134,31 @@
     document.querySelector('[data-bind="stat-optedout"]').textContent = stats.optedOut;
     runState.textContent = enabled ? 'Sending' : 'Paused';
     toggle.textContent = enabled ? 'Pause' : stats.todaySent > 0 ? 'Resume sending' : 'Start sending';
+    // Per-number split: 70 over 2 numbers shows ~35 each.
+    const perBox = document.querySelector('[data-bind="per-account"]');
+    if (perBox) {
+      perBox.textContent = '';
+      const list = stats.perAccount || [];
+      if (list.length > 1) {
+        for (const a of list) {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between gap-3 rounded-lg bg-surface-container px-3.5 py-2.5';
+          const left = document.createElement('span');
+          left.className = 'font-body-sm text-body-sm text-on-surface-variant';
+          left.textContent = (a.connected ? '● ' : '○ ') + (a.displayName || a.id);
+          const right = document.createElement('span');
+          right.className = 'font-body-sm text-body-sm font-medium text-on-surface';
+          right.textContent = a.sentToday + '/' + a.share;
+          row.append(left, right);
+          perBox.appendChild(row);
+        }
+      } else if (list.length === 1) {
+        const hint = document.createElement('p');
+        hint.className = 'font-body-sm text-body-sm text-on-surface-variant';
+        hint.textContent = 'Add a second number on the Connection page to split the load (e.g. 70/day → 35 + 35).';
+        perBox.appendChild(hint);
+      }
+    }
     const cfg = stats.config || {};
     if (document.activeElement && configForm.contains(document.activeElement)) return;
     if (cfg.dailyCap !== undefined) configForm.elements.dailyCap.value = cfg.dailyCap;
@@ -138,6 +166,37 @@
     if (cfg.startHour !== undefined) configForm.elements.startHour.value = cfg.startHour;
     if (cfg.endHour !== undefined) configForm.elements.endHour.value = cfg.endHour;
     if (cfg.minGapMinutes !== undefined) configForm.elements.minGapMinutes.value = cfg.minGapMinutes;
+    renderTemplates(cfg);
+  }
+
+  const templateForm = document.querySelector('[data-form="templates"]');
+  const templateList = document.querySelector('[data-bind="template-list"]');
+
+  function renderTemplates(cfg) {
+    if (!templateList || !templateForm) return;
+    if (templateList.dataset.filled === '1' && document.activeElement && templateForm.contains(document.activeElement)) return;
+    templateList.dataset.filled = '1';
+    templateList.textContent = '';
+    const templates = (cfg && Array.isArray(cfg.templates) ? cfg.templates : []).slice(0, 20);
+    const rows = templates.length ? templates : [''];
+    rows.forEach(function (t, i) {
+      const row = document.createElement('div');
+      row.className = 'flex items-start gap-2';
+      const area = document.createElement('textarea');
+      area.rows = 2;
+      area.maxLength = 2000;
+      area.value = t;
+      area.placeholder = 'Variant ' + (i + 1) + ' — e.g. {hi|hello} {{name}}, quick question…';
+      area.className = 'focusable min-w-0 flex-1 rounded-lg border border-outline-variant/40 bg-surface p-2.5 font-body-sm text-body-sm text-on-surface';
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'focusable shrink-0 rounded-lg bg-surface-container px-3 py-2 text-body-sm';
+      del.textContent = '✕';
+      del.title = 'Remove variant';
+      del.addEventListener('click', function () { row.remove(); });
+      row.append(area, del);
+      templateList.appendChild(row);
+    });
   }
 
   async function refresh() {
@@ -171,23 +230,69 @@
     }).catch((err) => App.toast(err.message, 'error'));
   });
 
+  function numOrUndefined(value) {
+    if (value === '' || value === null || value === undefined) return undefined;
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.round(n) : undefined;
+  }
+
   configForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const btn = configForm.querySelector('button[type="submit"]');
     App.withBusy(btn, async () => {
-      const body = {
-        dailyCap: Number(configForm.elements.dailyCap.value),
-        maxPerHour: Number(configForm.elements.maxPerHour.value),
-        startHour: Number(configForm.elements.startHour.value),
-        endHour: Number(configForm.elements.endHour.value),
-        minGapMinutes: Number(configForm.elements.minGapMinutes.value),
-      };
-      const data = await App.api('/outbound/config', { method: 'POST', body });
-      renderStats({ ...data.config, todaySent: 0, dailyCap: data.config.dailyCap, enabled: data.config.enabled, notContacted: 0, sent: 0, replied: 0, failed: 0, optedOut: 0, config: data.config });
+      const body = {};
+      const dc = numOrUndefined(configForm.elements.dailyCap.value);
+      const mh = numOrUndefined(configForm.elements.maxPerHour.value);
+      const sh = numOrUndefined(configForm.elements.startHour.value);
+      const eh = numOrUndefined(configForm.elements.endHour.value);
+      const mg = numOrUndefined(configForm.elements.minGapMinutes.value);
+      if (dc !== undefined) body.dailyCap = dc;
+      if (mh !== undefined) body.maxPerHour = mh;
+      if (sh !== undefined) body.startHour = sh;
+      if (eh !== undefined) body.endHour = eh;
+      if (mg !== undefined) body.minGapMinutes = mg;
+      await App.api('/outbound/config', { method: 'POST', body });
       App.toast('Pacing saved');
       await refresh();
     }).catch((err) => App.toast(err.message, 'error'));
   });
+
+  if (templateForm) {
+    const addBtn = templateForm.querySelector('[data-action="add-template"]');
+    if (addBtn) {
+      addBtn.addEventListener('click', function () {
+        if (templateList.children.length >= 20) {
+          App.toast('Up to 20 variants.', 'error');
+          return;
+        }
+        const row = document.createElement('div');
+        row.className = 'flex items-start gap-2';
+        const area = document.createElement('textarea');
+        area.rows = 2;
+        area.maxLength = 2000;
+        area.placeholder = 'Variant ' + (templateList.children.length + 1) + ' — e.g. {hi|hello} {{name}}, quick question…';
+        area.className = 'focusable min-w-0 flex-1 rounded-lg border border-outline-variant/40 bg-surface p-2.5 font-body-sm text-body-sm text-on-surface';
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'focusable shrink-0 rounded-lg bg-surface-container px-3 py-2 text-body-sm';
+        del.textContent = '✕';
+        del.addEventListener('click', function () { row.remove(); });
+        row.append(area, del);
+        templateList.appendChild(row);
+        area.focus();
+      });
+    }
+    templateForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const btn = templateForm.querySelector('button[type="submit"]');
+      App.withBusy(btn, async function () {
+        const templates = Array.from(templateList.querySelectorAll('textarea')).map(function (t) { return t.value.trim(); }).filter(Boolean);
+        await App.api('/outbound/config', { method: 'POST', body: { templates } });
+        App.toast(templates.length ? templates.length + ' variant(s) saved' : 'Variants cleared');
+        await refresh();
+      }).catch(function (err) { App.toast(err.message, 'error'); });
+    });
+  }
 
   toggle.addEventListener('click', () => {
     App.withBusy(toggle, async () => {

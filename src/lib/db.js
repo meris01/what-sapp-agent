@@ -113,6 +113,25 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_events_created ON events (created_at);
+
+  -- Linked WhatsApp senders (multi-account, max 5). Each row owns its own
+  -- Baileys auth directory under data/wa-auth/<id>/.
+  CREATE TABLE IF NOT EXISTS wa_accounts (
+    id                TEXT PRIMARY KEY,
+    slot              INTEGER NOT NULL UNIQUE,
+    label             TEXT,
+    phone             TEXT,
+    name              TEXT,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    status            TEXT NOT NULL DEFAULT 'disconnected',
+    last_connected_at INTEGER,
+    warmup_started_at INTEGER,
+    daily_cap         INTEGER,
+    cooldown_until    INTEGER,
+    fail_count        INTEGER NOT NULL DEFAULT 0,
+    created_at        INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL
+  );
 `);
 
 /** Adds columns introduced after a database was first created. */
@@ -152,6 +171,12 @@ addColumnIfMissing('leads', 'sent_at', 'INTEGER');
 addColumnIfMissing('leads', 'replied_at', 'INTEGER');
 addColumnIfMissing('leads', 'fail_reason', 'TEXT');
 addColumnIfMissing('leads', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
+// Multi-account routing: which sender owns / sent this lead.
+addColumnIfMissing('leads', 'account_id', 'TEXT');
+addColumnIfMissing('leads', 'sent_via', 'TEXT');
+// Which linked account last handled a conversation (inbound replies go back
+// out through the same account that received them).
+addColumnIfMissing('conversations', 'account_id', 'TEXT');
 
 const now = () => Date.now();
 
@@ -739,6 +764,116 @@ function clearAllConversations() {
   db.exec('DELETE FROM messages; DELETE FROM conversations;');
 }
 
+/* --------------------------- WhatsApp accounts --------------------------- */
+
+const MAX_WHATSAPP_ACCOUNTS = 5;
+
+function listWhatsAppAccounts() {
+  try {
+    return db.prepare('SELECT * FROM wa_accounts ORDER BY slot').all();
+  } catch {
+    return [];
+  }
+}
+
+function getWhatsAppAccount(id) {
+  try {
+    return db.prepare('SELECT * FROM wa_accounts WHERE id = ?').get(String(id));
+  } catch {
+    return undefined;
+  }
+}
+
+function createWhatsAppAccount({ label = null } = {}) {
+  const existing = listWhatsAppAccounts();
+  if (existing.length >= MAX_WHATSAPP_ACCOUNTS) {
+    const err = new Error(`Account limit reached (max ${MAX_WHATSAPP_ACCOUNTS}).`);
+    err.code = 'ACCOUNT_LIMIT';
+    throw err;
+  }
+  const usedSlots = new Set(existing.map((a) => a.slot));
+  let slot = 1;
+  while (usedSlots.has(slot)) slot += 1;
+  const id = `acc${slot}`;
+  const ts = now();
+  const cleanLabel = label === null || label === undefined ? null : String(label).trim().slice(0, 60) || null;
+  db.prepare(
+    `INSERT INTO wa_accounts (id, slot, label, status, warmup_started_at, created_at, updated_at)
+     VALUES (?, ?, ?, 'disconnected', ?, ?, ?)
+     ON CONFLICT(id) DO NOTHING`
+  ).run(id, slot, cleanLabel, ts, ts, ts);
+  return getWhatsAppAccount(id);
+}
+
+function updateWhatsAppAccount(id, patch = {}) {
+  const current = getWhatsAppAccount(id);
+  if (!current) return null;
+  const next = {
+    label: patch.label !== undefined ? (patch.label === null ? null : String(patch.label).trim().slice(0, 60) || null) : current.label,
+    phone: patch.phone !== undefined ? patch.phone : current.phone,
+    name: patch.name !== undefined ? patch.name : current.name,
+    enabled: patch.enabled !== undefined ? (patch.enabled ? 1 : 0) : current.enabled,
+    status: patch.status !== undefined ? String(patch.status).slice(0, 24) : current.status,
+    last_connected_at: patch.last_connected_at !== undefined ? patch.last_connected_at : current.last_connected_at,
+    daily_cap: patch.daily_cap !== undefined ? patch.daily_cap : current.daily_cap,
+    cooldown_until: patch.cooldown_until !== undefined ? patch.cooldown_until : current.cooldown_until,
+    fail_count: patch.fail_count !== undefined ? Math.max(0, Math.floor(Number(patch.fail_count) || 0)) : current.fail_count,
+  };
+  db.prepare(
+    `UPDATE wa_accounts SET label = ?, phone = ?, name = ?, enabled = ?, status = ?,
+       last_connected_at = ?, daily_cap = ?, cooldown_until = ?, fail_count = ?, updated_at = ?
+     WHERE id = ?`
+  ).run(next.label, next.phone, next.name, next.enabled, next.status, next.last_connected_at, next.daily_cap, next.cooldown_until, next.fail_count, now(), String(id));
+  return getWhatsAppAccount(id);
+}
+
+function deleteWhatsAppAccount(id) {
+  try {
+    return db.prepare('DELETE FROM wa_accounts WHERE id = ?').run(String(id)).changes > 0;
+  } catch {
+    return false;
+  }
+}
+
+function setConversationAccount(jid, accountId) {
+  try {
+    if (!accountId) return;
+    db.prepare('UPDATE conversations SET account_id = ? WHERE jid = ?').run(String(accountId), jid);
+  } catch {
+    // ignore
+  }
+}
+
+function getTodaySentCountByAccount(ref = Date.now()) {
+  const out = {};
+  try {
+    const start = new Date(ref);
+    start.setHours(0, 0, 0, 0);
+    const rows = db.prepare(
+      "SELECT COALESCE(sent_via, account_id, 'unknown') AS acc, COUNT(*) AS n FROM leads WHERE status = 'sent' AND sent_at >= ? GROUP BY acc"
+    ).all(start.getTime());
+    for (const r of rows) out[r.acc] = r.n;
+  } catch {
+    // ignore
+  }
+  return out;
+}
+
+function getHourSentCountByAccount(ref = Date.now()) {
+  const out = {};
+  try {
+    const d = new Date(ref);
+    d.setMinutes(0, 0, 0);
+    const rows = db.prepare(
+      "SELECT COALESCE(sent_via, account_id, 'unknown') AS acc, COUNT(*) AS n FROM leads WHERE status = 'sent' AND sent_at >= ? GROUP BY acc"
+    ).all(d.getTime());
+    for (const r of rows) out[r.acc] = r.n;
+  } catch {
+    // ignore
+  }
+  return out;
+}
+
 module.exports = {
   db,
   getSetting,
@@ -789,4 +924,13 @@ module.exports = {
   purgeOldData,
   forgetCustomer,
   clearAllConversations,
+  MAX_WHATSAPP_ACCOUNTS,
+  listWhatsAppAccounts,
+  getWhatsAppAccount,
+  createWhatsAppAccount,
+  updateWhatsAppAccount,
+  deleteWhatsAppAccount,
+  setConversationAccount,
+  getTodaySentCountByAccount,
+  getHourSentCountByAccount,
 };

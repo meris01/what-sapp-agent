@@ -87,6 +87,7 @@
                 <th class="py-2 pr-3 font-medium">Phone</th>
                 <th class="py-2 pr-3 font-medium">Reach-out message</th>
                 <th class="py-2 pr-3 font-medium">Status</th>
+                <th class="py-2 pr-3 font-medium">Via</th>
                 <th class="py-2 pr-3 font-medium">Scheduled</th>
                 <th class="py-2 pr-3 font-medium">Sent</th>
                 <th class="py-2 pr-3 font-medium">Reply</th>
@@ -94,7 +95,7 @@
               </tr>
             </thead>
             <tbody data-bind="lead-rows">
-              <tr><td colspan="7" class="py-6 text-center text-on-surface-variant">Loading…</td></tr>
+              <tr><td colspan="8" class="py-6 text-center text-on-surface-variant">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -111,11 +112,12 @@
         </div>
         <div>
           <div class="mb-2 flex items-center justify-between font-body-sm text-body-sm">
-            <span class="text-on-surface-variant">Daily progress</span>
+            <span class="text-on-surface-variant">Daily progress (split across numbers)</span>
             <span class="font-medium text-on-surface" data-bind="daily-text">0/60 sent</span>
           </div>
           <div class="h-2.5 overflow-hidden rounded-full bg-surface-container"><div data-bind="daily-bar" class="h-2.5 rounded-full bg-primary transition-all" style="width:0%"></div></div>
         </div>
+        <div data-bind="per-account" class="flex flex-col gap-2"></div>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-amber-500"></span><span class="font-body-sm text-body-sm">Waiting</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-pending">0</div></div>
           <div class="rounded-xl bg-surface-container p-3.5"><div class="flex items-center gap-1.5 text-on-surface-variant"><span class="h-2 w-2 rounded-full bg-sky-500"></span><span class="font-body-sm text-body-sm">Sent</span></div><div class="mt-1 font-display-lg text-display-lg leading-none text-on-surface" data-bind="stat-sent">0</div></div>
@@ -131,14 +133,25 @@
       <form data-form="config" class="flex flex-col gap-5 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
         <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Pace — human and random</h2>
         <div class="grid grid-cols-2 gap-4 font-body-sm text-body-sm text-on-surface-variant">
-          <label class="flex flex-col gap-1.5">Daily goal, max 60<input name="dailyCap" type="number" min="1" max="60" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
-          <label class="flex flex-col gap-1.5">Max per hour<input name="maxPerHour" type="number" min="1" max="30" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Daily goal, all numbers<input name="dailyCap" type="number" min="1" max="150" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Max per hour<input name="maxPerHour" type="number" min="1" max="10" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
           <label class="flex flex-col gap-1.5">Day starts<input name="startHour" type="number" min="0" max="23" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
           <label class="flex flex-col gap-1.5">Day ends<input name="endHour" type="number" min="0" max="23" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
-          <label class="flex flex-col gap-1.5">Shortest gap, minutes<input name="minGapMinutes" type="number" min="0" max="120" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
+          <label class="flex flex-col gap-1.5">Shortest gap, minutes<input name="minGapMinutes" type="number" min="2" max="120" class="focusable rounded-lg border border-outline-variant/40 bg-surface p-2.5 text-on-surface" /></label>
         </div>
-        <p class="font-body-sm text-body-sm leading-relaxed text-on-surface-variant">The first message lands within ~2 minutes. After that every gap is fully random — a minute, five minutes, twenty — auto-spread so the whole goal lands inside your hours. Never a fixed rhythm.</p>
+        <p class="font-body-sm text-body-sm leading-relaxed text-on-surface-variant">The goal is <strong>split</strong> — 70/day over 2 numbers = 35 + 35, and no number ever exceeds 35/day. The first message lands within ~2 minutes; after that every gap is fully random and auto-spread inside your hours. New numbers warm up from 10/day.</p>
         <button type="submit" class="focusable self-start rounded-full bg-surface-container px-6 py-2.5 font-body-sm text-body-sm font-medium text-on-surface transition-colors hover:bg-surface-container-low disabled:opacity-60">Save pace</button>
+      </form>
+
+      <!-- Templates -->
+      <form data-form="templates" class="flex flex-col gap-4 rounded-xl bg-surface-container-lowest p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03),0_0_1px_rgba(0,0,0,0.05)]">
+        <h2 class="font-label-caps text-label-caps uppercase tracking-widest text-on-surface-variant">Message variants — beat spam filters</h2>
+        <p class="font-body-sm text-body-sm leading-relaxed text-on-surface-variant">Write 2–4 variants. Use <code>{hi|hello|hey}</code> for spinning and <code>{{name}}</code> for the lead's name. Every send rolls a fresh variant, so filters never see the same blast twice.</p>
+        <div data-bind="template-list" class="flex flex-col gap-3"></div>
+        <div class="flex gap-2">
+          <button type="button" data-action="add-template" class="focusable rounded-full bg-surface-container px-5 py-2 font-body-sm text-body-sm text-on-surface">+ Add variant</button>
+          <button type="submit" class="focusable rounded-full bg-primary px-5 py-2 font-body-sm text-body-sm font-medium text-on-primary">Save variants</button>
+        </div>
       </form>
     </div>
   </div>

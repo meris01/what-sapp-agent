@@ -3,6 +3,7 @@
 const logger = require('../logger');
 const { WhatsAppProvider, STATES } = require('./provider');
 const { BaileysProvider } = require('./baileys');
+const { MultiWhatsAppManager } = require('./manager');
 
 /**
  * Everything above this layer talks to a provider, never to a library.
@@ -30,10 +31,22 @@ function createWhatsAppClient(name = process.env.WHATSAPP_PROVIDER || 'baileys')
   return client;
 }
 
+function createAccountManager(opts = {}) {
+  const manager = new MultiWhatsAppManager(opts);
+  manager.syncFromDb();
+  logger.info(
+    { accounts: manager.listAccounts().length },
+    'whatsapp account manager ready'
+  );
+  return manager;
+}
+
 module.exports = {
   createWhatsAppClient,
+  createAccountManager,
   availableProviders: () => Object.keys(PROVIDERS),
   WhatsAppProvider,
   BaileysProvider,
+  MultiWhatsAppManager,
   STATES,
 };

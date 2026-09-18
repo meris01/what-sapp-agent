@@ -34,13 +34,28 @@ const OUTBOUND_CONFIG_KEY = 'outbound_config';
  * - `templates`/`activeTemplateIdx`: message templates; the active one is
  *   used when a lead carries no per-lead message.
  */
+/**
+ * Anti-ban posture (see docs in outboundScheduler.js):
+ * - Global daily goal is SPLIT across healthy accounts (round-robin), so 70
+ *   with 2 numbers ≈ 35 each — never 70 from one number.
+ * - Per-number ceiling: no single SIM sends more than PER_ACCOUNT_DAILY_MAX
+ *   cold messages/day, no more than PER_ACCOUNT_HOURLY_MAX/hour, with wide
+ *   random gaps (default min 8 min). New numbers warm up from 10/day.
+ * - Templates rotate with {a|b} spintax + {{name}} so no two numbers blast
+ *   byte-identical text all day.
+ */
+const PER_ACCOUNT_DAILY_MAX = 35;
+const PER_ACCOUNT_HOURLY_MAX = 5;
+const WARMUP_DAILY_CAP = 10;
+const WARMUP_DAYS = 14;
+
 const DEFAULT_OUTBOUND_CONFIG = Object.freeze({
   enabled: false,
   dailyCap: 60,
   startHour: 9,
   endHour: 18,
-  minGapMinutes: 1,
-  maxPerHour: 8,
+  minGapMinutes: 8,
+  maxPerHour: 5,
   templates: [],
   activeTemplateIdx: 0,
 });
@@ -69,7 +84,7 @@ function normaliseOutboundConfig(input) {
     : [...DEFAULT_OUTBOUND_CONFIG.templates];
   return {
     enabled: Boolean(source.enabled),
-    dailyCap: clampInt(source.dailyCap, DEFAULT_OUTBOUND_CONFIG.dailyCap, 1, 1000),
+    dailyCap: clampInt(source.dailyCap, DEFAULT_OUTBOUND_CONFIG.dailyCap, 1, 150),
     startHour: clampInt(source.startHour, DEFAULT_OUTBOUND_CONFIG.startHour, 0, 23),
     endHour: clampInt(source.endHour, DEFAULT_OUTBOUND_CONFIG.endHour, 0, 23),
     minGapMinutes: clampInt(source.minGapMinutes, DEFAULT_OUTBOUND_CONFIG.minGapMinutes, 0, 1440),
@@ -82,6 +97,58 @@ function normaliseOutboundConfig(input) {
       Math.max(0, templates.length - 1)
     ),
   };
+}
+
+/**
+ * Expand {hi|hello|hey} spintax (nested-safe, up to 5 passes) and {{name}}
+ * placeholders. Every send rolls fresh variants so identical blasts can't be
+ * fingerprinted as bulk.
+ */
+function expandSpintax(template, random = Math.random) {
+  let out = String(template || '');
+  for (let pass = 0; pass < 5 && /\{[^{}]*\|[^{}]*\}/.test(out); pass += 1) {
+    out = out.replace(/\{([^{}]*)\}/g, (match, inner) => {
+      if (!inner.includes('|')) return match;
+      const options = inner.split('|');
+      return options[Math.floor(random() * options.length)];
+    });
+  }
+  return out;
+}
+
+function personalise(template, lead = {}, random = Math.random) {
+  const name = (lead.name || '').trim().split(/\s+/)[0] || '';
+  let out = expandSpintax(template, random);
+  out = out.replace(/\{\{\s*name\s*\}\}/gi, name || 'there');
+  out = out.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return out;
+}
+
+/** Split a global daily goal evenly across N healthy senders. */
+function splitDailyCap(globalCap, healthyCount) {
+  const n = Math.max(1, Math.floor(Number(healthyCount) || 1));
+  const total = Math.max(0, Math.floor(Number(globalCap) || 0));
+  const base = Math.floor(total / n);
+  const remainder = total % n;
+  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
+/**
+ * Effective per-number cap: explicit per-account override wins, otherwise the
+ * number's fair share of the global goal clamped to the safe ceiling — and
+ * warmup numbers (first WARMUP_DAYS) never exceed WARMUP_DAILY_CAP.
+ */
+function effectiveAccountCap({ globalCap, healthyCount, account = null, nowMs = Date.now() }) {
+  if (account && Number.isFinite(Number(account.daily_cap)) && Number(account.daily_cap) > 0) {
+    return Math.min(PER_ACCOUNT_DAILY_MAX, Math.max(1, Math.floor(Number(account.daily_cap))));
+  }
+  const shares = splitDailyCap(globalCap, healthyCount);
+  const share = Math.min(PER_ACCOUNT_DAILY_MAX, shares[0] || 0);
+  const startedAt = account && (account.warmupStartedAt || account.warmup_started_at);
+  if (startedAt && nowMs - Number(startedAt) < WARMUP_DAYS * 24 * 60 * 60 * 1000) {
+    return Math.min(share, WARMUP_DAILY_CAP);
+  }
+  return Math.max(1, share);
 }
 
 /**
@@ -298,9 +365,17 @@ function importLeadsFromText(rawText, opts = {}) {
 module.exports = {
   OUTBOUND_CONFIG_KEY,
   DEFAULT_OUTBOUND_CONFIG,
+  PER_ACCOUNT_DAILY_MAX,
+  PER_ACCOUNT_HOURLY_MAX,
+  WARMUP_DAILY_CAP,
+  WARMUP_DAYS,
   normaliseOutboundConfig,
   getOutboundConfig,
   setOutboundConfig,
+  expandSpintax,
+  personalise,
+  splitDailyCap,
+  effectiveAccountCap,
   splitCsvLine,
   parseLeadsInput,
   importLeadsFromText,

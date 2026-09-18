@@ -48,8 +48,40 @@ function buildState(wa) {
   const followups = settings.getFollowups();
   const instructions = settings.getInstructions();
 
+  let whatsapp = {};
+  try {
+    whatsapp = wa.getStatus() || {};
+  } catch {
+    whatsapp = { state: 'disconnected', connected: false };
+  }
+  // Legacy single-provider stubs (tests) carry no accounts array — normalise.
+  if (!Array.isArray(whatsapp.accounts)) {
+    const legacy = {
+      id: whatsapp.accountId || 'acc1',
+      slot: 1,
+      label: null,
+      displayName: whatsapp.phone ? `+${whatsapp.phone}` : 'WhatsApp',
+      enabled: true,
+      phone: whatsapp.phone || null,
+      name: whatsapp.name || null,
+      state: whatsapp.state || 'disconnected',
+      connected: Boolean(whatsapp.connected),
+      hasCredentials: Boolean(whatsapp.hasCredentials),
+      qr: whatsapp.qr || null,
+      qrGeneratedAt: whatsapp.qrGeneratedAt || null,
+      lastConnectedAt: whatsapp.lastConnectedAt || null,
+      lastError: whatsapp.lastError || null,
+      warmupStartedAt: null,
+      dailyCap: null,
+      cooldownUntil: null,
+      failCount: 0,
+    };
+    whatsapp = { ...whatsapp, accounts: [legacy], connectedCount: legacy.connected ? 1 : 0, totalCount: 1 };
+  }
+
   return {
-    whatsapp: wa.getStatus(),
+    whatsapp,
+    accounts: whatsapp.accounts,
     provider: {
       name: wa.name,
       capabilities: wa.capabilities,
@@ -223,6 +255,106 @@ function createApiRouter({ wa, agent }) {
     asyncRoute(async (_req, res) => {
       await wa.logout();
       await wa.start();
+      res.json({ ok: true, state: buildState(wa) });
+    })
+  );
+
+  /* ------------------------- whatsapp accounts ------------------------ */
+  // Multi-account (max 5). Each number links its own QR and sends its share.
+
+  const needsManager = (res) => {
+    if (!wa || typeof wa.listAccounts !== 'function') {
+      res.status(501).json({ ok: false, error: 'Multi-account is not available in this build.' });
+      return true;
+    }
+    return false;
+  };
+
+  router.get('/whatsapp/accounts', (req, res) => {
+    if (needsManager(res)) return;
+    res.json({ ok: true, accounts: wa.listAccounts(), max: 5 });
+  });
+
+  router.post('/whatsapp/accounts', waLimiter, (req, res) => {
+    if (needsManager(res)) return;
+    const label = typeof req.body?.label === 'string' ? req.body.label.trim().slice(0, 60) : null;
+    try {
+      const created = wa.listAccounts();
+      if (created.length >= 5) {
+        return res.status(400).json({ ok: false, error: 'You can link up to 5 WhatsApp numbers.' });
+      }
+      // createAccount is async on the manager but synchronous underneath;
+      // support both shapes.
+      Promise.resolve(wa.createAccount(label)).then(
+        (row) => res.json({ ok: true, account: row, state: buildState(wa) }),
+        (err) => res.status(400).json({ ok: false, error: err.code === 'ACCOUNT_LIMIT' ? 'You can link up to 5 WhatsApp numbers.' : 'Could not add that number slot.' })
+      );
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: 'You can link up to 5 WhatsApp numbers.' });
+    }
+  });
+
+  router.patch('/whatsapp/accounts/:id', (req, res) => {
+    if (needsManager(res)) return;
+    const id = String(req.params.id || '').slice(0, 16);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const patch = {};
+    if (body.label !== undefined) patch.label = body.label === null ? null : String(body.label).slice(0, 60);
+    if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+    if (body.dailyCap !== undefined) {
+      const n = Math.round(Number(body.dailyCap));
+      if (!Number.isFinite(n) || n < 1 || n > 35) {
+        return res.status(400).json({ ok: false, error: 'Per-number daily cap is 1–35.' });
+      }
+      patch.daily_cap = n;
+    }
+    try {
+      const db = require('../lib/db');
+      const updated = db.updateWhatsAppAccount(id, patch);
+      if (!updated) return res.status(404).json({ ok: false, error: 'Unknown WhatsApp account.' });
+      if (typeof wa.syncFromDb === 'function') wa.syncFromDb();
+      db.addEvent('info', 'wa.account_updated', `Updated ${id}`, req.session.username);
+      return res.json({ ok: true, state: buildState(wa) });
+    } catch {
+      return res.status(500).json({ ok: false, error: 'Could not update that account.' });
+    }
+  });
+
+  router.post(
+    '/whatsapp/accounts/:id/connect',
+    waLimiter,
+    asyncRoute(async (req, res) => {
+      if (needsManager(res)) return;
+      const status = await wa.startAccount(String(req.params.id));
+      res.json({ ok: true, account: status, state: buildState(wa) });
+    })
+  );
+
+  router.post(
+    '/whatsapp/accounts/:id/logout',
+    waLimiter,
+    asyncRoute(async (req, res) => {
+      if (needsManager(res)) return;
+      const status = await wa.logoutAccount(String(req.params.id));
+      res.json({ ok: true, account: status, state: buildState(wa) });
+    })
+  );
+
+  router.delete(
+    '/whatsapp/accounts/:id',
+    waLimiter,
+    asyncRoute(async (req, res) => {
+      if (needsManager(res)) return;
+      const current = wa.listAccounts();
+      if (current.length <= 1) {
+        return res.status(400).json({ ok: false, error: 'Keep at least one number slot.' });
+      }
+      await wa.removeAccount(String(req.params.id));
+      try {
+        require('../lib/db').addEvent('warn', 'wa.account_removed', `Removed ${req.params.id}`, req.session.username);
+      } catch {
+        // ignore
+      }
       res.json({ ok: true, state: buildState(wa) });
     })
   );
@@ -436,14 +568,50 @@ function createApiRouter({ wa, agent }) {
   });
 
   router.get('/outbound/stats', (req, res) => {
-    let cfg = { enabled: false, dailyCap: 60, startHour: 9, endHour: 21, minGapMinutes: 5, maxPerHour: 8 };
+    let cfg = { enabled: false, dailyCap: 60, startHour: 9, endHour: 18, minGapMinutes: 8, maxPerHour: 5 };
+    let outboundLib = null;
     try {
-      cfg = require('../lib/outbound').getOutboundConfig();
+      outboundLib = require('../lib/outbound');
+      cfg = outboundLib.getOutboundConfig();
     } catch {
       // defaults stand
     }
     const counts = typeof db.getStatusCounts === 'function' ? db.getStatusCounts() : {};
     const todaySent = typeof db.getTodaySentCount === 'function' ? db.getTodaySentCount() : 0;
+    let byAccount = {};
+    try {
+      byAccount = typeof db.getTodaySentCountByAccount === 'function' ? db.getTodaySentCountByAccount() : {};
+    } catch {
+      byAccount = {};
+    }
+    // Fair split of today's goal across currently healthy senders.
+    let healthyCount = 1;
+    let accounts = [];
+    try {
+      if (wa && typeof wa.listAccounts === 'function') {
+        accounts = wa.listAccounts();
+        const healthy = typeof wa.healthyAccounts === 'function' ? wa.healthyAccounts() : accounts.filter((a) => a.connected && a.enabled);
+        healthyCount = Math.max(1, healthy.length);
+      }
+    } catch {
+      // ignore
+    }
+    let perAccount = [];
+    try {
+      if (outboundLib && typeof outboundLib.splitDailyCap === 'function') {
+        const shares = outboundLib.splitDailyCap(cfg.dailyCap, healthyCount);
+        perAccount = accounts.map((a, i) => ({
+          id: a.id,
+          displayName: a.displayName || a.id,
+          connected: a.connected,
+          enabled: a.enabled,
+          share: shares[Math.min(i, shares.length - 1)] ?? 0,
+          sentToday: byAccount[a.id] || 0,
+        }));
+      }
+    } catch {
+      perAccount = [];
+    }
     res.json({
       ok: true,
       stats: {
@@ -459,6 +627,9 @@ function createApiRouter({ wa, agent }) {
         dailyCap: cfg.dailyCap,
         enabled: cfg.enabled,
         config: cfg,
+        byAccount,
+        perAccount,
+        healthyCount,
       },
     });
   });
@@ -471,12 +642,12 @@ function createApiRouter({ wa, agent }) {
     let rows;
     try {
       if (status === 'all') {
-        rows = db.db.prepare('SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason FROM leads ORDER BY id DESC LIMIT ?').all(limit);
+        rows = db.db.prepare('SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason, account_id, sent_via FROM leads ORDER BY id DESC LIMIT ?').all(limit);
       } else if (status === 'needsFollowup') {
         const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-        rows = db.db.prepare("SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason FROM leads WHERE status = 'sent' AND sent_at IS NOT NULL AND sent_at < ? ORDER BY sent_at LIMIT ?").all(cutoff, limit);
+        rows = db.db.prepare("SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason, account_id, sent_via FROM leads WHERE status = 'sent' AND sent_at IS NOT NULL AND sent_at < ? ORDER BY sent_at LIMIT ?").all(cutoff, limit);
       } else {
-        rows = db.db.prepare('SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason FROM leads WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit);
+        rows = db.db.prepare('SELECT id, phone, name, message, status, scheduled_at, sent_at, replied_at, attempts, fail_reason, account_id, sent_via FROM leads WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit);
       }
     } catch {
       rows = [];
@@ -492,19 +663,29 @@ function createApiRouter({ wa, agent }) {
       return res.status(500).json({ ok: false, error: 'Outbound module unavailable.' });
     }
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    if (body.dailyCap !== undefined && (Math.round(Number(body.dailyCap)) < 1 || Math.round(Number(body.dailyCap)) > 60)) {
-      return res.status(400).json({ ok: false, error: 'Daily cap is at most 60.' });
+    // Global goal is SPLIT across senders (70 over 2 numbers = 35 + 35, each
+    // still capped at 35/number/day). Per-number safety lives in the scheduler.
+    if (body.dailyCap !== undefined && (Math.round(Number(body.dailyCap)) < 1 || Math.round(Number(body.dailyCap)) > 150)) {
+      return res.status(400).json({ ok: false, error: 'Daily goal is 1–150 across all numbers (max 35 per number).' });
+    }
+    if (body.maxPerHour !== undefined && (Math.round(Number(body.maxPerHour)) < 1 || Math.round(Number(body.maxPerHour)) > 10)) {
+      return res.status(400).json({ ok: false, error: 'Max per hour is 1–10. Stay at 5 or below per number.' });
+    }
+    if (body.minGapMinutes !== undefined && (Math.round(Number(body.minGapMinutes)) < 2 || Math.round(Number(body.minGapMinutes)) > 120)) {
+      return res.status(400).json({ ok: false, error: 'Shortest gap is 2–120 minutes. Wider gaps look human.' });
     }
     if (body.startHour !== undefined && body.endHour !== undefined && Number(body.startHour) >= Number(body.endHour)) {
       return res.status(400).json({ ok: false, error: 'Start hour must be before end hour.' });
     }
     const saved = outbound.setOutboundConfig({
       ...(body.enabled !== undefined ? { enabled: Boolean(body.enabled) } : {}),
-      ...(body.dailyCap !== undefined ? { dailyCap: Math.round(Number(body.dailyCap)) } : {}),
-      ...(body.startHour !== undefined ? { startHour: Math.round(Number(body.startHour)) } : {}),
-      ...(body.endHour !== undefined ? { endHour: Math.round(Number(body.endHour)) } : {}),
-      ...(body.minGapMinutes !== undefined ? { minGapMinutes: Math.round(Number(body.minGapMinutes)) } : {}),
-      ...(body.maxPerHour !== undefined ? { maxPerHour: Math.round(Number(body.maxPerHour)) } : {}),
+      ...(body.dailyCap !== undefined && Number.isFinite(Number(body.dailyCap)) ? { dailyCap: Math.round(Number(body.dailyCap)) } : {}),
+      ...(body.startHour !== undefined && Number.isFinite(Number(body.startHour)) ? { startHour: Math.round(Number(body.startHour)) } : {}),
+      ...(body.endHour !== undefined && Number.isFinite(Number(body.endHour)) ? { endHour: Math.round(Number(body.endHour)) } : {}),
+      ...(body.minGapMinutes !== undefined && Number.isFinite(Number(body.minGapMinutes)) ? { minGapMinutes: Math.round(Number(body.minGapMinutes)) } : {}),
+      ...(body.maxPerHour !== undefined && Number.isFinite(Number(body.maxPerHour)) ? { maxPerHour: Math.round(Number(body.maxPerHour)) } : {}),
+      ...(Array.isArray(body.templates) ? { templates: body.templates } : {}),
+      ...(body.activeTemplateIdx !== undefined && Number.isFinite(Number(body.activeTemplateIdx)) ? { activeTemplateIdx: Math.round(Number(body.activeTemplateIdx)) } : {}),
     });
     db.addEvent('info', 'outbound.config', saved.enabled ? `Outbound on, ${saved.dailyCap}/day` : 'Outbound off', req.session.username);
     res.json({ ok: true, config: saved });
